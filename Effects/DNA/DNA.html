@@ -1,0 +1,156 @@
+<head>
+    <title>DNA</title>
+    <meta description="Deoxyribonucleic acid, now in stunning RGB."/>
+    <meta publisher="Derek Huber" />
+    <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#002000"/>
+    <meta property="helixColor" label="Helix Color" type="color" min="0" max="360" default="#00ff00"/>
+    <meta property="rainbow" label="Rainbow" type="boolean" default="0"/>
+    <meta property="colorCycleEnabled" label="Color Cycle" type="boolean" default="0"/>
+    <meta property="colorCycleSpeed" label="Color Cycle Speed" type="number" min="1" max="100" default="50"/>
+    <meta property="speed" label="Speed" type="number" min="1" max="10" default="5"/>
+    <meta property="horizontalSpread" label="Horizontal Spread" type="number" min="1" max="10" default="1"/>
+    <meta property="verticalSpread" label="Vertical Spread" type="number" min="25" max="75" default="50"/>
+    <meta property="outerLinks" label="Outer Links" type="boolean" default="1"/>
+    <meta property="innerLinks" label="Inner Links" type="boolean" default="1"/>
+    <meta property="linkSize" label="Link Size" type="number" min="1" max="10" default="3"/>
+    <meta property="direction" label="Swap Direction" type="boolean" default="0"/>
+</head>
+  
+<body style="margin: 0; padding: 0;">
+    <canvas id="exCanvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+    var c = document.getElementById("exCanvas");
+    var ctx = c.getContext("2d");
+    var width = 320;
+    var height = 200;
+    
+    var tau = Math.PI * 2;
+    var time;
+    var colorCycleHue = 1;
+
+    function helixPoint(pointNum) {
+        this.pointNum = pointNum;
+        this.isHelixOne = (pointNum % 2) === 0;
+        this.linkNum = Math.floor(pointNum / 2);
+        this.xPos = -20 + Math.floor(pointNum / 2) * 30;
+        this.rainbowHue = (360 / 13) * (this.linkNum - 1); //-1 offset so red starts on the screen
+        this.yPos;
+        this.radius;
+
+        this.UpdatePosition = function() {
+            var pointTime;
+            if (direction)
+                pointTime = time - ((1 / (horizontalSpread + 4)) * this.linkNum * Math.PI); //Rotational difference between each link
+            else
+                pointTime = time + ((1 / (horizontalSpread + 4)) * this.linkNum * Math.PI);
+
+
+            if (this.isHelixOne) {
+                this.yPos = 100 + Math.sin(pointTime) * verticalSpread;
+                this.radius = 10 + Math.cos(pointTime) * 5;
+            }
+            else {
+                this.yPos = 100 + Math.sin(pointTime + Math.PI) * verticalSpread;
+                this.radius = 10 + Math.cos(pointTime + Math.PI) * 5;
+            }
+        };
+
+        this.Draw = function() {
+            var currentHue;
+
+            //Being verbose here for readability
+            if (colorCycleEnabled && rainbow)
+                currentHue = direction ? this.rainbowHue - colorCycleHue : this.rainbowHue + colorCycleHue;
+            else if (colorCycleEnabled && !rainbow)
+                currentHue = colorCycleHue;
+            else if (!colorCycleEnabled && rainbow)
+                currentHue = this.rainbowHue;
+
+            if (!colorCycleEnabled && !rainbow)
+                ctx.fillStyle = helixColor;
+            else
+                ctx.fillStyle = 'hsl('+ currentHue + ', 100%, 50%)';
+
+            ctx.beginPath();
+            ctx.arc(this.xPos, this.yPos, this.radius, 0, tau);
+            ctx.fill();
+        };
+    }
+
+    //2 points off screen on both sides - in order to draw link lines
+    var helixPoints = [];
+    for (var i = 0; i < 26; i++)
+        helixPoints.push(new helixPoint(i));
+
+    function update() {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, 320,200);
+
+        if (colorCycleHue > 360)
+            colorCycleHue = 1;
+        else
+            colorCycleHue += (colorCycleSpeed / 40);
+
+        time = Date.now() / (100 * (11 - speed));
+
+        helixPoints.forEach(helixPoint => helixPoint.UpdatePosition());
+
+        //Draw helix points afterwards to cover link start/end
+        ctx.lineWidth = linkSize;
+        if (innerLinks) {
+            //Vertical links
+            for (var i = 0; i < 13; i++) {
+                var currentHue;
+
+                //Being verbose here for readability
+                if (colorCycleEnabled && rainbow)
+                    currentHue = direction ? helixPoints[i*2].rainbowHue - colorCycleHue : helixPoints[i*2].rainbowHue + colorCycleHue;
+                else if (colorCycleEnabled && !rainbow)
+                    currentHue = colorCycleHue;
+                else if (!colorCycleEnabled && rainbow)
+                    currentHue = helixPoints[i*2].rainbowHue;
+
+                if (!colorCycleEnabled && !rainbow)
+                    ctx.strokeStyle = helixColor;
+                else
+                    ctx.strokeStyle = 'hsl('+ currentHue + ', 100%, 50%)';
+
+                ctx.beginPath();
+                ctx.moveTo(helixPoints[i*2].xPos, helixPoints[i*2].yPos);
+                ctx.lineTo(helixPoints[i*2 + 1].xPos, helixPoints[i*2 + 1].yPos);
+                ctx.stroke();
+            }
+        }
+        if (outerLinks) {
+            //Horizontal links
+            for (var i = 0; i < 24; i++) {
+                var currentHue;
+
+                //Being verbose here for readability
+                if (colorCycleEnabled && rainbow)
+                    currentHue = direction ? helixPoints[i+2].rainbowHue - colorCycleHue : helixPoints[i].rainbowHue + colorCycleHue;
+                else if (colorCycleEnabled && !rainbow)
+                    currentHue = colorCycleHue;
+                else if (!colorCycleEnabled && rainbow)
+                    currentHue = helixPoints[i + 2].rainbowHue;
+
+                if (!colorCycleEnabled && !rainbow)
+                    ctx.strokeStyle = helixColor;
+                else
+                    ctx.strokeStyle = 'hsl('+ currentHue + ', 100%, 50%)';
+
+                ctx.beginPath();
+                ctx.moveTo(helixPoints[i].xPos, helixPoints[i].yPos);
+                ctx.lineTo(helixPoints[i + 2].xPos, helixPoints[i + 2].yPos);
+                ctx.stroke();
+            }
+        }
+
+        helixPoints.forEach(helixPoint => helixPoint.Draw());
+        window.requestAnimationFrame(update);
+    }
+
+    window.requestAnimationFrame(update);
+</script>

@@ -1,0 +1,110 @@
+<head>
+    <title>Stack</title>
+    <meta description="Blocks slowly stack on top of each other before the screen clears."/>
+    <meta publisher="Derek Huber" />
+    <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
+    <meta property="blockColor" label="Block Color" type="color" min="0" max="360" default="#00ff80"/>
+    <meta property="fallingSpeed" label="Falling Speed" type="number" min="1" max="10" default="2"/>
+    <meta property="secondsBeforeClearing" label="Seconds Before Clearing" type="number" min="0" max="10" default="1"/>
+    <meta property="rainbowStack" label="Rainbow Stack" type="boolean" default="0"/>
+    <meta property="colorCycleEnabled" label="Color Cycle" type="boolean" default="0"/>
+    <meta property="colorCycleSpeed" label="Color Cycle Speed" type="number" min="1" max="100" default="50"/>
+    <meta property="safeZoneColor" label="Safe Zone Color" type="color" min="0" max="360" default="#00ff80"/>
+    <meta property="safeZoneHeight" label="Safe Zone Height" type="number" min="0" max="200" default="20"/>
+</head>
+  
+<body style="margin: 0; padding: 0;">
+    <canvas id="exCanvas" width="320" height="200"></canvas>
+</body>
+  
+<script>
+    var c = document.getElementById("exCanvas");
+    var ctx = c.getContext("2d");  
+    var width = 320;
+    var height = 200;
+    var colorCycleHue = 1;
+
+    var tower = {
+        blocks: [],
+        blockCount: 0
+    };
+
+    function fallingBlock(blockNum) {
+        this.yToStopAt = 180 - (20 * blockNum);
+        this.blockHue = blockNum * 36;
+        this.curY = -40;
+        this.doneFalling = false;
+
+        this.Draw = function() {
+            var currentHue;
+
+            //Being verbose here for readability
+            if (colorCycleEnabled && rainbowStack)
+                currentHue = this.blockHue + colorCycleHue;
+            else if (colorCycleEnabled && !rainbowStack)
+                currentHue = colorCycleHue;
+            else if (!colorCycleEnabled && rainbowStack)
+                currentHue = this.blockHue;
+
+            if (!colorCycleEnabled && !rainbowStack)
+                ctx.fillStyle = blockColor;
+            else
+                ctx.fillStyle = 'hsl('+ currentHue + ', 100%, 50%)';
+
+            if (this.curY < this.yToStopAt) {
+                ctx.fillRect(0, this.curY, 320, 20);
+                this.curY += fallingSpeed;
+            }
+            else {
+                this.doneFalling = true;
+                ctx.fillRect(0, this.yToStopAt, 320, 20);
+            }
+        };
+    }
+
+    var pausing = false;
+    var pauseTime = performance.now();
+
+    function update() {
+
+        if (colorCycleHue > 360)
+            colorCycleHue = 1;
+        else
+            colorCycleHue += (colorCycleSpeed / 40);
+
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, 320,200);
+
+        //Don't reset tower until user-configured time has passed
+        if (pausing) {
+            if (performance.now() > pauseTime + (secondsBeforeClearing * 1000)) {
+                pausing = false;
+                tower.blocks = [];
+                tower.blockCount = 0;
+            }
+        }
+        else {
+            //Tower built
+            if (tower.blockCount === 10 && tower.blocks[9].doneFalling) {
+                pausing = true;
+                pauseTime = performance.now();
+            }
+
+            //Block hit the tower, time to add another falling block
+            if (tower.blockCount === 0 || tower.blocks[tower.blockCount-1].doneFalling) {
+                tower.blocks.push(new fallingBlock(tower.blockCount));
+                tower.blockCount++;
+            }
+        }
+
+        tower.blocks.forEach(block => block.Draw());
+
+        ctx.fillStyle = safeZoneColor;
+        ctx.fillRect(0, 0, 20, safeZoneHeight);
+        ctx.fillStyle = (colorCycleEnabled || rainbowStack) ? 'hsl('+ colorCycleHue + ', 100%, 50%)' : safeZoneColor;
+        ctx.fillRect(20, 0, 20, safeZoneHeight);
+        window.requestAnimationFrame(update);
+    }
+
+    window.requestAnimationFrame(update);
+</script>
