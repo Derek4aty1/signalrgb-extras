@@ -1,0 +1,115 @@
+<head>
+    <title>Floating Bubbles</title>
+    <meta description="Float on.  Feelin' sudsy?">
+    <meta publisher="Derek Huber">
+    <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#00afe9"/>
+    <meta property="bubbleFill" label="Bubble Fill" type="color" min="0" max="360" default="#d3d3d3"/>
+    <meta property="outline" label=" Outline" type="boolean" default="1"/>
+    <meta property="bubbleOutline" label="Outline Color" type="color" min="0" max="360" default="#ffffff"/>
+    <meta property="rainbow" label="Rainbow" type="boolean" default="0"/>
+    <meta property="colorCycle" label="Color Cycle" type="boolean" default="0"/>
+    <meta property="colorCycleSpeed" label="Color Cycle Speed" type="number" min="1" max="100" default="25"/>
+    <meta property="speed" label="Speed" type="number" min="1" max="10" default="3"/>
+    <meta property="bubbleCount" label="Bubble Count" type="number" min="1" max="100" default="30"/>
+</head>
+<body style="margin: 0; padding: 0;">
+    <canvas id="exCanvas" width="320" height="200"></canvas>
+</body>
+                
+<script>
+    const canvas = document.getElementById("exCanvas");
+    const ctx = canvas.getContext("2d");
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    let colorCycleHue = 0;
+    let lastSavedBubbleCount = 0;
+    let bubbles = [];
+
+    class Bubble {
+        constructor() {
+            this.size = Math.random() * 25 + 10;
+            this.x = Math.random() * canvasWidth;
+            this.y = Math.random() * canvasHeight;
+            this.speed = Math.random() * 1 + 1; // Speed variance
+            this.angle = Math.random() * 360;
+            this.angleSpeed = Math.random() * 5 + 1; // Sway variance
+        }
+
+        Update() {
+            // Float on up!
+            this.angle += this.angleSpeed;
+            this.x += Math.sin(this.angle * Math.PI / 360) * (0.32 * speed - 0.22); // y = mx + b
+            this.y -= this.speed * (0.32 * speed - 0.22);
+            
+            // Back down you go, with new randomized values
+            if (this.y < 0 - this.size) {
+                this.size = Math.random() * 25 + 10;
+                this.x = Math.random() * canvasWidth;
+                this.y = canvasHeight + this.size;
+                this.speed = Math.random() * 1 + 1;
+                this.angle = Math.random() * 360;
+                this.angleSpeed = Math.random() * 5 + 1;
+            }
+        }
+
+        Draw() {
+            // Styling
+            let hue;
+            // Being verbose here for readability
+            if (rainbow && colorCycle)
+                hue = this.x / canvasWidth * 360 + colorCycleHue;
+            else if (!rainbow && colorCycle)
+                hue = colorCycleHue;
+            else if (rainbow && !colorCycle)
+                hue = this.x / canvasWidth * 360;
+
+            if (!colorCycle && !rainbow)
+                ctx.fillStyle = bubbleFill;
+            else
+                ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+
+            ctx.strokeStyle = outline ? bubbleOutline : ctx.fillStyle;
+            ctx.lineWidth = 2;
+
+            // Bubble
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            // Reflection
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size - 5, Math.PI, 1.5 * Math.PI);
+            ctx.stroke();
+        }
+    }
+
+    function initBubbleArray() {
+        bubbles = [];
+        for (let i = 0; i < bubbleCount; i++) {
+            bubbles.push(new Bubble());
+        }
+    }
+    
+    function update() {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        colorCycleHue = (colorCycleHue + (colorCycleSpeed / 40)) % 360;
+
+        if (lastSavedBubbleCount !== bubbleCount) {
+            lastSavedBubbleCount = bubbleCount;
+            initBubbleArray();
+        }
+
+        for (let i = 0; i < bubbleCount; i++) {
+            bubbles[i].Update();
+            bubbles[i].Draw();
+        }
+        
+        window.requestAnimationFrame(update);
+    }
+    
+    window.requestAnimationFrame(update);
+</script>
