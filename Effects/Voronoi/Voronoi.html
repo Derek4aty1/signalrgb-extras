@@ -1,0 +1,202 @@
+<head>
+  <title>Voronoi</title>
+  <meta description="Squeeze on in!"/>
+  <meta publisher="Derek Huber"/>
+  <meta property="colorMode" label="Color Mode" type="combobox"
+        values="Beach,Contemporary,Cottagecore,Dark Carnival,Kawaii,Mondrian,Neon,Ocean,Outrun,Random,Retro,Space,Summer,Vaporwave,3-Custom Colors,4-Custom Colors"
+        default="Dark Carnival" />
+  <meta property="color1" label="Custom Color 1" type="color" default="#ff0000" min="0" max="360" />
+  <meta property="color2" label="Custom Color 2" type="color" default="#0001ff" min="0" max="360" />
+  <meta property="color3" label="Custom Color 3" type="color" default="#04ff00" min="0" max="360" />
+  <meta property="color4" label="Custom Color 4" type="color" default="#9b00ff" min="0" max="360" />
+  <meta property="distanceFormula" label="Distance Formula" type="combobox" values="Euclidean,Manhattan,Chebyshev" default="Euclidean" />
+  <meta property="siteCount" label="Site Count" type="number" min="2" max="50" default="20"/>
+  <meta property="scale" label="Scale" tooltip="HIGH CPU Impact" type="number" min="1" max="10" default="5"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="5" default="2"/>
+  <meta property="drawSites" label="Draw Sites" type="boolean" default="0"/>
+  <meta property="siteColor" label="Site Color" type="color" min="0" max="360" default="#000000"/>
+</head>
+<body style="margin: 0; padding: 0">
+  <canvas id="exCanvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById("exCanvas");
+  const ctx = canvas.getContext("2d");
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  // Dark Carnival by me, Derek Huber.  All others by SignalRGB team.
+  const colorSchemes = [
+    { name: "Beach",         colors: [[203, 68, 84], [186, 94, 44], [180, 81, 73], [45, 47, 44], [28, 67, 85], [151, 94, 75]] },
+    { name: "Contemporary",  colors: [[210, 76, 23], [43, 100, 50], [195, 57, 53], [9, 82, 57], [22, 81, 78], [178, 45, 53]] },
+    { name: "Cottagecore",   colors: [[276, 16, 37], [35, 54, 56], [61, 35, 37], [105, 11, 37], [28, 40, 49], [40, 92, 85]] },
+    { name: "Dark Carnival", colors: [[355, 75, 19], [343, 81, 23], [355, 100, 53], [206, 27, 15], [186, 23, 18], [172, 39, 26]] },
+    { name: "Kawaii",        colors: [[183, 100, 87], [171, 100, 94], [316, 100, 93], [203, 100, 85], [274, 100, 89], [0, 100, 100]] },
+    { name: "Mondrian",      colors: [[60, 100, 50], [60, 100, 50], [270, 100, 100], [220, 100, 50], [0, 100, 50], [35, 100, 100]] },
+    { name: "Neon",          colors: [[186, 82, 42], [331, 66, 45], [38, 72, 62], [216, 64, 44], [228, 38, 60], [166, 37, 41]] },
+    { name: "Ocean",         colors: [[193, 44, 17], [195, 31, 52], [194, 42, 30], [197, 45, 45], [193, 40, 70], [190, 50, 90]] },
+    { name: "Rainbow",       colors: [[0, 100, 50], [35, 100, 50], [60, 100, 50], [120, 100, 50], [220, 100, 50], [270, 100, 50]] },
+    { name: "Outrun",        colors: [[286, 46, 22], [340, 67, 59], [49, 78, 62], [30, 78, 56], [227, 51, 56], [224, 77, 70]] },
+    { name: "Retro",         colors: [[349, 100, 46], [41, 100, 55], [58, 100, 30], [199, 36, 46], [221, 100, 19], [3, 100, 36]] },
+    { name: "Space",         colors: [[293, 84, 90], [271, 71, 36], [280, 81, 18], [269, 70, 26], [230, 42, 41], [218, 100, 47]] },
+    { name: "Summer",        colors: [[280, 16, 25], [10, 79, 64], [19, 84, 75], [60, 75, 68], [350, 38, 64], [265, 19, 44]] },
+    { name: "Vaporwave",     colors: [[271, 89, 64], [242, 80, 75], [185, 41, 57], [298, 100, 71], [299, 93, 78], [49, 85, 65]] }
+  ];
+
+  let sites = [];
+  let lastSavedSiteCount;
+  let lastSavedColorMode;
+  
+  class Site {
+    constructor(x, y, fillStyle) {
+      this.x = x;
+      this.y = y;
+      this.fillStyle = fillStyle;
+      this.dy = 0;
+      this.dx = 0;
+    }
+
+    UpdatePosition() {
+      this.dx = (this.dx + Math.random() - 0.5) % speed;
+      this.dy = (this.dy + Math.random() - 0.5) % speed;
+      this.x += this.dx;
+      this.y += this.dy;
+
+      // Outside of canvas
+      if (this.x < 0 || this.x > canvasWidth || this.y < 0 || this.y > canvasHeight) {
+        this.x = getRandomInt(canvasWidth + 1);
+        this.y = getRandomInt(canvasHeight + 1);
+        this.fillStyle = getColorModeFillStyle();
+      }
+    }
+  }
+
+  function getRandomInt(max) {
+    return Math.floor(Math.random() * max);
+  }
+
+  function getColorModeFillStyle() {
+    let fillStyle;
+    switch(colorMode) {
+      case 'Beach': case 'Contemporary': case 'Cottagecore': case 'Dark Carnival': case 'Kawaii': case 'Mondrian': 
+      case 'Neon': case 'Ocean': case 'Outrun': case 'Retro': case 'Space': case 'Summer': case 'Vaporwave':
+        let colorIndex = getRandomInt(6);
+        let colorScheme = colorSchemes.find(scheme => scheme.name == colorMode);
+        fillStyle = `hsl(${colorScheme.colors[colorIndex][0]}, ${colorScheme.colors[colorIndex][1]}%, ${colorScheme.colors[colorIndex][2]}%)`;
+        break;
+      case 'Random':
+        fillStyle = `hsl(${getRandomInt(360)}, 100%, 50%)`;
+        break;
+      case '3-Custom Colors':
+        let rand3Color = getRandomInt(3);
+        if (rand3Color === 0) {
+          fillStyle = color1;
+        } else if (rand3Color === 1) {
+          fillStyle = color2;
+        } else {
+          fillStyle = color3;
+        }
+        break;
+      case '4-Custom Colors':
+        let rand4Color = getRandomInt(4);
+        if (rand4Color === 0) {
+          fillStyle = color1;
+        } else if (rand4Color === 1) {
+          fillStyle = color2;
+        } else if (rand4Color === 2) {
+          fillStyle = color3;
+        } else {
+          fillStyle = color4;
+        }
+        break;
+    }
+    return fillStyle;
+  }
+
+  // colorN callbacks - SignalRGB calls these automatically
+  function oncolor1Changed() {
+    if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
+      initSiteArray();
+    }
+  }
+
+  function oncolor2Changed() {
+    if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
+      initSiteArray();
+    }
+  }
+
+  function oncolor3Changed() {
+    if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
+      initSiteArray();
+    }
+  }
+
+  function oncolor4Changed() {
+    if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
+      initSiteArray();
+    }
+  }
+
+  function initSiteArray() {
+    sites = [];
+    for (let i = 0; i < siteCount; i++) {
+      sites.push(new Site(getRandomInt(canvasWidth + 1), getRandomInt(canvasHeight + 1), getColorModeFillStyle()));
+    }
+  }
+
+  function update() {
+
+    if (lastSavedSiteCount !== siteCount || lastSavedColorMode !== colorMode) {
+      lastSavedSiteCount = siteCount;
+      lastSavedColorMode = colorMode;
+      initSiteArray();
+    }
+
+    // Update positions
+    sites.forEach(site => site.UpdatePosition());
+
+    // Brute force - calculate closest site for each pixel and draw.
+    // There are algorithms that are much more efficient, but for a 320x200 canvas inside an RGB application, this performs well enough and is easier to understand.
+    for (let x = 0; x < canvasWidth; x += scale) {
+			for (let y = 0; y < canvasHeight; y += scale) {
+        let min = null;
+        let closestSite = null;
+
+        // Calculate
+        for (let i = 0; i < siteCount; i++) {
+          let distance;
+
+          if (distanceFormula === 'Euclidean') {
+            distance = Math.sqrt(Math.pow(x - sites[i].x, 2) + Math.pow(y - sites[i].y, 2));
+          } else if (distanceFormula === 'Manhattan') {
+            distance = Math.abs(x - sites[i].x) + Math.abs(y - sites[i].y);
+          } else if (distanceFormula === 'Chebyshev') {
+            distance = Math.max(Math.abs(x - sites[i].x), Math.abs(y - sites[i].y));
+          }
+
+          // New closest
+          if (min === null || distance < min) {
+            min = distance;
+            closestSite = i;
+          }
+        }
+
+        // Draw
+        ctx.fillStyle = sites[closestSite].fillStyle;
+        ctx.fillRect(x, y, scale, scale);
+			}
+		}
+
+    // Site locations
+    if (drawSites) {
+      ctx.fillStyle = siteColor;
+      sites.forEach(site => ctx.fillRect(site.x, site.y, scale, scale));
+    }
+
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(update);
+</script>
