@@ -4,9 +4,11 @@
     <meta publisher="Derek Huber" />
     <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
     <meta property="blockColor" label="Block Color" type="color" min="0" max="360" default="#00ff80"/>
+    <meta property="blockSize" label="Block Size" type="number" min="5" max="50" default="20"/>
     <meta property="fallingSpeed" label="Falling Speed" type="number" min="1" max="10" default="2"/>
     <meta property="secondsBeforeClearing" label="Seconds Before Clearing" type="number" min="0" max="10" default="1"/>
-    <meta property="rainbowStack" label="Rainbow Stack" type="boolean" default="0"/>
+    <meta property="horizontalStack" label="Horizontal Stacking" type="boolean" default="0"/>
+    <meta property="rainbowEnabled" label="Rainbow" type="boolean" default="0"/>
     <meta property="colorCycleEnabled" label="Color Cycle" type="boolean" default="0"/>
     <meta property="colorCycleSpeed" label="Color Cycle Speed" type="number" min="1" max="100" default="50"/>
     <meta property="safeZoneColor" label="Safe Zone Color" type="color" min="0" max="360" default="#00ff80"/>
@@ -18,91 +20,127 @@
 </body>
   
 <script>
-    var c = document.getElementById("exCanvas");
-    var ctx = c.getContext("2d");  
-    var width = 320;
-    var height = 200;
-    var colorCycleHue = 1;
+    const canvas = document.getElementById("exCanvas");
+    const ctx = canvas.getContext("2d");
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    let tower = null;
 
-    var tower = {
-        blocks: [],
-        blockCount: 0
-    };
+    let pausing = false;
+    let pauseTime = performance.now();
 
-    function fallingBlock(blockNum) {
-        this.yToStopAt = 180 - (20 * blockNum);
-        this.blockHue = blockNum * 36;
-        this.curY = -40;
-        this.doneFalling = false;
+    let colorCycleHue = 0;
 
-        this.Draw = function() {
-            var currentHue;
+    class FallingBlock {
+        constructor(blockNum) {
+            if (horizontalStack) {
+                this.coordToStopAt = blockSize * blockNum;
+                this.curCoord = canvasWidth + 2 * blockSize;
+            } else { // Vertical stack
+                this.coordToStopAt = canvasHeight - blockSize - blockSize * blockNum;
+                this.curCoord = -2 * blockSize;
+            }
+            this.rainbowHue = blockNum / tower.totalBlockCount * 360;
+            this.doneFalling = false;
+        }
+
+        draw() {
+            let currentHue;
 
             //Being verbose here for readability
-            if (colorCycleEnabled && rainbowStack)
-                currentHue = this.blockHue + colorCycleHue;
-            else if (colorCycleEnabled && !rainbowStack)
+            if (rainbowEnabled && colorCycleEnabled) {
+                currentHue = this.rainbowHue + colorCycleHue;
+            } else if (!rainbowEnabled && colorCycleEnabled) {
                 currentHue = colorCycleHue;
-            else if (!colorCycleEnabled && rainbowStack)
-                currentHue = this.blockHue;
-
-            if (!colorCycleEnabled && !rainbowStack)
-                ctx.fillStyle = blockColor;
-            else
-                ctx.fillStyle = 'hsl('+ currentHue + ', 100%, 50%)';
-
-            if (this.curY < this.yToStopAt) {
-                ctx.fillRect(0, this.curY, 320, 20);
-                this.curY += fallingSpeed;
+            } else if (rainbowEnabled && !colorCycleEnabled) {
+                currentHue = this.rainbowHue;
             }
-            else {
-                this.doneFalling = true;
-                ctx.fillRect(0, this.yToStopAt, 320, 20);
+
+            if (!rainbowEnabled && !colorCycleEnabled) {
+                ctx.fillStyle = blockColor;
+            } else {
+                ctx.fillStyle = `hsl(${currentHue}, 100%, 50%)`;
+            }
+
+            if (horizontalStack) {
+                if (this.curCoord > this.coordToStopAt) {
+                    ctx.fillRect(this.curCoord, 0, blockSize, canvasHeight);
+                    this.curCoord -= fallingSpeed;
+                } else {
+                    this.doneFalling = true;
+                    ctx.fillRect(this.coordToStopAt, 0, blockSize, canvasHeight);
+                }
+            } else { // Vertical Stack
+                if (this.curCoord < this.coordToStopAt) {
+                    ctx.fillRect(0, this.curCoord, canvasWidth, blockSize);
+                    this.curCoord += fallingSpeed;
+                } else {
+                    this.doneFalling = true;
+                    ctx.fillRect(0, this.coordToStopAt, canvasWidth, blockSize);
+                }
             }
         };
     }
 
-    var pausing = false;
-    var pauseTime = performance.now();
+    //#region SignalRGB property callbacks
+    function onblockSizeChanged() {
+        pausing = false;
+        initTower();
+    }
+
+    function onhorizontalStackChanged() {
+        pausing = false;
+        initTower();
+    }
+    //#endregion
+
+    function initTower() {
+        tower = {
+            blocks: [],
+            currentBlockCount: 0,
+            totalBlockCount: horizontalStack ? Math.ceil(canvasWidth / blockSize) : Math.ceil(canvasHeight / blockSize)
+        }
+    }
 
     function update() {
 
-        if (colorCycleHue > 360)
-            colorCycleHue = 1;
-        else
-            colorCycleHue += (colorCycleSpeed / 40);
+        // First run
+        if (tower === null) {
+            initTower();
+        }
+
+        colorCycleHue = (colorCycleHue + colorCycleSpeed / 40) % 360;
 
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, 320,200);
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
         //Don't reset tower until user-configured time has passed
         if (pausing) {
-            if (performance.now() > pauseTime + (secondsBeforeClearing * 1000)) {
+            if (performance.now() > pauseTime + secondsBeforeClearing * 1000) {
                 pausing = false;
                 tower.blocks = [];
-                tower.blockCount = 0;
+                tower.currentBlockCount = 0;
             }
-        }
-        else {
+        } else { // Mark tower built or continue building
             //Tower built
-            if (tower.blockCount === 10 && tower.blocks[9].doneFalling) {
+            if (tower.currentBlockCount === tower.totalBlockCount && tower.blocks[tower.totalBlockCount - 1].doneFalling) {
                 pausing = true;
                 pauseTime = performance.now();
-            }
-
             //Block hit the tower, time to add another falling block
-            if (tower.blockCount === 0 || tower.blocks[tower.blockCount-1].doneFalling) {
-                tower.blocks.push(new fallingBlock(tower.blockCount));
-                tower.blockCount++;
+            } else if (tower.currentBlockCount === 0 || tower.blocks[tower.currentBlockCount - 1].doneFalling) {
+                tower.blocks.push(new FallingBlock(tower.currentBlockCount));
+                tower.currentBlockCount++;
             }
         }
 
-        tower.blocks.forEach(block => block.Draw());
+        tower.blocks.forEach(block => block.draw());
 
         ctx.fillStyle = safeZoneColor;
         ctx.fillRect(0, 0, 20, safeZoneHeight);
-        ctx.fillStyle = (colorCycleEnabled || rainbowStack) ? 'hsl('+ colorCycleHue + ', 100%, 50%)' : safeZoneColor;
+        ctx.fillStyle = rainbowEnabled || colorCycleEnabled ? `hsl(${colorCycleHue}, 100%, 50%)` : safeZoneColor;
         ctx.fillRect(20, 0, 20, safeZoneHeight);
+
         window.requestAnimationFrame(update);
     }
 
