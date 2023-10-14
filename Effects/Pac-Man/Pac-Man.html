@@ -1,0 +1,488 @@
+<head>
+  <title>Pac-Man</title>
+  <meta description="Waka waka!"/>
+  <meta publisher="Derek Huber"/>
+  <meta property="scale" label="Scale" type="number" min="1" max="20" default="3"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="10" default="3"/>
+  <meta property="colorCycleSpeed" label="Color Cycle Speed" tooltip="Used for Cycle Fill Methods" type="number" min="1" max="10" default="5"/>
+  <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000040"/>
+  <meta property="pacManFillMethod" label="Pac-Man Fill Method" type="combobox" 
+    values="Pac-Man Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+    default="Pac-Man Color"/>
+  <meta property="pacManColor" label="Pac-Man Color" type="color" min="0" max="360" default="#ffff00"/>
+  <meta property="drawPellets" label="Draw Pellets" type="boolean" default="1"/>
+  <meta property="pelletScale" label="Pellet Scale" type="number" min="1" max="10" default="2"/>
+  <meta property="pelletFillMethod" label="Pellet Fill Method" type="combobox" 
+    values="Pellet Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+    default="Pellet Color"/>
+  <meta property="pelletColor" label="Pellet Color" type="color" min="0" max="360" default="#fffeab"/>
+  <meta property="drawGhosts" label="Draw Ghosts" type="boolean" default="1"/>
+  <meta property="singleGhost" label="Single Ghost" type="boolean" default="0"/>
+  <meta property="ghostFillMethod" label="Ghost Fill Method" type="combobox" 
+    values="Original Colors,Ghost Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+    default="Original Colors"/>
+  <meta property="ghostColor" label="Ghost Color" type="color" min="0" max="360" default="#ff0000"/>
+  <meta property="progressOnKeyPress" label="Progress On Key Press" type="boolean" default="0"/>
+  <meta property="progressPerKeyPress" label="Progress Per Key Press" type="number" min="1" max="10" default="2"/>
+</head>
+<body style="margin: 0; padding: 0;">
+  <canvas id="canvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  // Globals
+  const MAX_HUE = 360;
+  const GHOST_SPRITE_SIZE = 16;
+  const GHOST_BODY_COLORS = [
+    '#ff0000', // Blinky
+    '#ffb7ff', // Pinky
+    '#01ffff', // Inky
+    '#ffb751', // Clyde
+  ];
+  const GHOST_EYE_COLOR = '#dedeff';
+  const GHOST_IRIS_COLOR = '#2121ff';
+
+  let COLOR_CYCLE = 0;
+
+  let pacMan = null;
+
+  //#region Classes
+  class Pellet {
+    constructor(x, y, size) {
+      // Top left of pellet
+      this.x = x;
+      this.y = y;
+      this.size = size;
+      this.eaten = false;
+      this.randRainbow = Math.random() * MAX_HUE;
+    }
+
+    draw(index, rowLength, opacity) {
+      if (!this.eaten) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.getPelletFillStyle(index, rowLength, opacity);
+        ctx.fillRect(0, 0, this.size, this.size);
+        ctx.restore();
+      }
+    }
+
+    getPelletFillStyle(index, rowLength, opacity) {
+      let fillStyle;
+      switch (pelletFillMethod) {
+        case 'Pellet Color':
+          fillStyle = hexToRGBA(pelletColor, parseFloat(opacity));
+          break;
+        case 'Global Color Cycle':
+          fillStyle = `hsla(${COLOR_CYCLE}, 100%, 50%, ${opacity})`;
+          break;
+        case 'Grid Rainbow (Static)':
+          // Basing off indicies so red is always first
+          fillStyle = `hsla(${(index / rowLength) * MAX_HUE}, 100%, 50%, ${opacity})`;
+          break;
+        case 'Grid Rainbow (Cycle Left)':
+          fillStyle = `hsla(${(((this.x + (this.size / 2)) / canvasWidth) * MAX_HUE) + COLOR_CYCLE}, 100%, 50%, ${opacity})`;
+          break;
+        case 'Grid Rainbow (Cycle Right)':
+          fillStyle = `hsla(${(((this.x + (this.size / 2)) / canvasWidth) * MAX_HUE) - COLOR_CYCLE}, 100%, 50%, ${opacity})`;
+          break;
+        case 'Random Rainbow (Static)':
+          fillStyle = `hsla(${this.randRainbow}, 100%, 50%, ${opacity})`;
+          break;
+        case 'Random Rainbow (Cycle)':
+          fillStyle = `hsla(${this.randRainbow + COLOR_CYCLE}, 100%, 50%, ${opacity})`;
+          break;
+      }
+      return fillStyle;
+    }
+  }
+
+  class Ghost {
+    constructor(x, y, size, isMovingRight) {
+      // Center of ghost
+      this.x = x;
+      this.y = y;
+      this.size = size;
+      this.isMovingRight = isMovingRight;
+      this.frame1 = true;
+      this.type = Math.floor(Math.random() * GHOST_BODY_COLORS.length);
+      this.randRainbow = Math.random() * MAX_HUE;
+    }
+
+    updatePosition() {
+      this.x += speed * 0.9 * (this.isMovingRight ? 1 : -1);
+    }
+
+    draw() {
+      this.frame1 = !this.frame1;
+
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      // Accounting for 1-pixel empty border vertically and horizontally to make ghosts roughly same sizes as Pac-Man
+      const scaleFactor = this.size / (GHOST_SPRITE_SIZE - 2);
+      const direction = this.isMovingRight ? 1 : -1; // Mirror over y-axis
+      ctx.scale(direction * scaleFactor, scaleFactor);
+
+      // Body
+      ctx.beginPath();
+      const centerOffset = GHOST_SPRITE_SIZE / 2;
+      ctx.rect(6 - centerOffset, 1 - centerOffset, 4, 1); // Top row
+      ctx.rect(4 - centerOffset, 2 - centerOffset, 8, 1); // 2nd row
+      ctx.rect(3 - centerOffset, 3 - centerOffset, 10, 1); // 3rd row
+      ctx.rect(2 - centerOffset, 4 - centerOffset, 12, 9); // Body base
+      // Outermost side columns and tentacles
+      if (this.frame1) {
+        ctx.rect(1 - centerOffset, 7 - centerOffset, 1, 8); // Left side column
+        ctx.rect(14 - centerOffset, 7 - centerOffset, 1, 8); // Right side column
+        ctx.rect(2 - centerOffset, 13 - centerOffset, 1, 1);
+        ctx.rect(4 - centerOffset, 13 - centerOffset, 1, 1);
+        ctx.rect(5 - centerOffset, 13 - centerOffset, 2, 2); // Left 2x2 block
+        ctx.rect(9 - centerOffset, 13 - centerOffset, 2, 2); // Right 2x2 block
+        ctx.rect(13 - centerOffset, 13 - centerOffset, 1, 1);
+        ctx.rect(11 - centerOffset, 13 - centerOffset, 1, 1);
+      } else {
+        ctx.rect(1 - centerOffset, 7 - centerOffset, 1, 6); // Left side column
+        ctx.rect(14 - centerOffset, 7 - centerOffset, 1, 6); // Right side column
+        ctx.rect(1 - centerOffset, 13 - centerOffset, 4, 1); // Left 4x1 block
+        ctx.rect(2 - centerOffset, 14 - centerOffset, 2, 1); // Left 2x1 block
+        ctx.rect(6 - centerOffset, 13 - centerOffset, 4, 1); // Middle 4x1 block
+        ctx.rect(7 - centerOffset, 14 - centerOffset, 2, 1); // Middle 2x1 block
+        ctx.rect(11 - centerOffset, 13 - centerOffset, 4, 1); // Right 4x1 block
+        ctx.rect(12 - centerOffset, 14 - centerOffset, 2, 1); // Right 2x1 block
+      }
+      ctx.closePath();
+      ctx.fillStyle = this.getGhostBodyFillStyle();
+      ctx.fill();
+
+      // Eyes
+      ctx.beginPath();
+      ctx.rect(5 - centerOffset, 4 - centerOffset, 2, 5); // Left
+      ctx.rect(4 - centerOffset, 5 - centerOffset, 4, 3);
+      ctx.rect(11 - centerOffset, 4 - centerOffset, 2, 5); // Right
+      ctx.rect(10 - centerOffset, 5 - centerOffset, 4, 3);
+      ctx.closePath();
+      ctx.fillStyle = GHOST_EYE_COLOR;
+      ctx.fill();
+
+      // Irises
+      ctx.beginPath();
+      ctx.rect(6 - centerOffset, 6 - centerOffset, 2, 2); // Left
+      ctx.rect(12 - centerOffset, 6 - centerOffset, 2, 2); // Right
+      ctx.closePath();
+      ctx.fillStyle = GHOST_IRIS_COLOR;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    getGhostBodyFillStyle() {
+      let fillStyle;
+      switch (ghostFillMethod) {
+        case 'Original Colors':
+          fillStyle = GHOST_BODY_COLORS[this.type];
+          break;
+        case 'Ghost Color':
+          fillStyle = ghostColor;
+          break;
+        case 'Global Color Cycle':
+          fillStyle = `hsl(${COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Static)':
+          fillStyle = `hsl(${(this.x / canvasWidth) * MAX_HUE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Cycle Left)':
+          fillStyle = `hsl(${((this.x / canvasWidth) * MAX_HUE) + COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Cycle Right)':
+          fillStyle = `hsl(${((this.x / canvasWidth) * MAX_HUE) - COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Random Rainbow (Static)':
+          fillStyle = `hsl(${this.randRainbow}, 100%, 50%)`;
+          break;
+        case 'Random Rainbow (Cycle)':
+          fillStyle = `hsl(${this.randRainbow + COLOR_CYCLE}, 100%, 50%)`;
+      }
+      return fillStyle;
+    }
+  }
+
+  class PacMan {
+    constructor(diameter) {
+      this.diameter = diameter;
+      this.radius = this.diameter / 2;
+
+      // Pellets
+      this.pelletSize = this.diameter * (pelletScale / 10);
+      this.rowCount = Math.floor(canvasHeight / this.diameter);
+      this.columnCount = Math.floor(canvasWidth / this.diameter);
+      // Offsets represent spacing from canvas walls - using these centers the entire grid
+      this.pelletXOffset = Math.floor((canvasWidth % this.diameter) / 2) + this.radius - (this.pelletSize / 2);
+      this.pelletYOffset = Math.floor((canvasHeight % this.diameter) / 2) + this.radius - (this.pelletSize / 2);
+      this.pelletOpacity = 1;
+      this.pelletGrid = [];
+      this.initPellets();
+
+      // Pac-Man - coordinates are center
+      this.x = 0 - (2 * this.diameter);
+      this.y = 0 + this.pelletYOffset + (this.pelletSize / 2);
+      this.currentRow = 0;
+      this.maxMouthSize =  Math.PI / 3.5;
+      this.mouthSize = 0;
+      this.states = {
+        isMouthOpening: true,
+        isMovingRight: true,
+        resetting: false
+      };
+      this.randRainbow = Math.random() * MAX_HUE;
+
+      // Ghosts
+      this.ghosts = [];
+      this.ghosts.push(new Ghost(this.x - (2 * this.diameter), this.y, this.diameter, this.states.isMovingRight));
+    }
+
+    initPellets() {
+      for (let row = 0; row < this.rowCount; row++) {
+        this.pelletGrid[row] = [];
+        for (let column = 0; column < this.columnCount; column++) {
+          const x = this.pelletXOffset + (column * this.diameter);
+          const y = this.pelletYOffset + (row * this.diameter);
+          this.pelletGrid[row][column] = new Pellet(x, y, this.pelletSize);
+        }
+      }
+    }
+
+    // Flow is normalUpdate => resetUpdate => else block => normalUpdate ...
+    update() {
+      if (this.shouldUpdate()) {
+        this.states.resetting ? this.resetUpdate() : this.normalUpdate();
+      } else { // Fade pellets in
+        this.pelletOpacity += drawPellets ? (0.01 * speed) : 1;
+      }
+    }
+
+    shouldUpdate() { return this.pelletOpacity >= 1; } // Pellets have faded in fully
+
+    normalUpdate() {
+      this.updatePosition();
+      this.updateMouth();
+      this.updateGhosts();
+    }
+
+    // Move ghosts only - once all ghosts are gone, start to fade pellets in before resuming normalUpdates
+    resetUpdate() {
+      if (this.ghosts.length > 0) {
+        this.updateGhosts();
+      } else {
+        this.pelletOpacity = 0;
+        this.pelletGrid.forEach((row) => row.forEach((pellet) => pellet.eaten = false));
+        const sideOfPacMan = this.states.isMovingRight ? -1 : 1;
+        const x = this.x + sideOfPacMan * (2 * this.diameter);
+        this.ghosts.unshift(new Ghost(x, this.y, this.diameter, this.states.isMovingRight));
+        this.states.resetting = false;
+      }
+    }
+
+    updatePosition() {
+      this.x += speed * (this.states.isMovingRight ? 1 : -1);
+
+      const rowDown = (newX) => {
+        this.checkForEatenPellets();
+        this.x = newX;
+        this.mouthSize = 0;
+        this.states.isMouthOpening = true;
+        this.states.isMovingRight = !this.states.isMovingRight;
+        this.currentRow++;
+        this.randRainbow = Math.random() * MAX_HUE;
+
+        if (this.currentRow === this.rowCount) { // Bottom of canvas
+          this.y = 0 + this.pelletYOffset + (this.pelletSize / 2);
+          this.currentRow = 0;
+          if (!drawGhosts) {
+            this.ghosts = [];
+          }
+          this.states.resetting = true;
+          return;
+        } else {
+          this.y += this.diameter;
+        }
+
+        // Iterating this direction and using unshift (i.e. push front) keeps ghosts in order they appear from Pac-Man
+        for (let i = (singleGhost ? 0 : this.currentRow); i >= 0; i--) {
+          const sideOfPacMan = this.states.isMovingRight ? -1 : 1;
+          const x = this.x + sideOfPacMan * ((2 * this.diameter) + (i * this.diameter));
+          this.ghosts.unshift(new Ghost(x, this.y, this.diameter, this.states.isMovingRight));
+        }
+      }
+
+      if (this.states.isMovingRight && this.x >= canvasWidth + (2 * this.diameter)) { // Past right canvas wall
+        rowDown(canvasWidth + (2 * this.diameter));
+      } else if (!this.states.isMovingRight && this.x <= 0 - (2 * this.diameter)) { // Past left canvas wall
+        rowDown(0 - (2 * this.diameter));
+      }
+    }
+
+    updateMouth() {
+      const mouthChange = (this.maxMouthSize / this.radius) * speed * 2;
+      this.mouthSize += mouthChange * (this.states.isMouthOpening ? 1 : -1);
+      if (this.mouthSize >= this.maxMouthSize) { // Start closing
+        this.mouthSize = this.maxMouthSize;
+        this.states.isMouthOpening = false;
+      } else if (this.mouthSize <= 0) { // Start opening
+        this.mouthSize = 0;
+        this.states.isMouthOpening = true;
+        this.checkForEatenPellets();
+      }
+    }
+    
+    updateGhosts() {
+      for (let i = this.ghosts.length - 1; i >= 0; i--) {
+        const ghost = this.ghosts[i];
+        ghost.updatePosition();
+        
+        if ((ghost.isMovingRight && ghost.x >= canvasWidth + (2 * this.diameter)) // Past right canvas wall
+          || (!ghost.isMovingRight && ghost.x <= 0 - (2 * this.diameter))) { // Past left canvas wall
+          this.ghosts.splice(i, 1);
+        }
+      }
+    }
+
+    checkForEatenPellets() {
+      this.pelletGrid[this.currentRow].forEach(pellet => {
+        if (!pellet.eaten) {
+          pellet.eaten = this.hasPelletBeenEaten(pellet);
+        }
+      });
+    }
+
+    hasPelletBeenEaten(pellet) {
+      const pelletMiddleX = pellet.x + (pellet.size / 2);
+      const pelletMiddleY = pellet.y + (pellet.size / 2);
+      const distance = Math.sqrt((pelletMiddleX - this.x) ** 2 + (pelletMiddleY - this.y) ** 2);
+      return distance < this.radius
+        || ((this.states.isMovingRight && pellet.x <= this.x)
+        || (!this.states.isMovingRight && pellet.x >= this.x)); // Catch alls for tiny scale + high speed
+    }
+
+    draw() {
+      if (drawPellets) {
+        this.drawPellets();
+      }
+      if (drawGhosts) {
+        this.drawGhosts();
+      }
+      this.drawPacMan();
+    }
+
+    drawPellets() {
+      this.pelletGrid.forEach((row) => {
+          row.forEach((pellet, columnIndex) => {
+            pellet.draw(columnIndex, row.length, this.pelletOpacity);
+          });
+      });
+    }
+
+    drawGhosts() {
+      this.ghosts.forEach(ghost => ghost.draw());
+    }
+
+    drawPacMan() {
+      const startAngle = 0 + this.mouthSize;
+      const endAngle = (2 * Math.PI) - this.mouthSize;
+
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      if (!this.states.isMovingRight) { // Mirror over y-axis
+        ctx.scale(-1, 1);
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, startAngle, endAngle); // Bottom lip all the way around until top lip
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fillStyle = this.getPacManFillStyle();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    getPacManFillStyle() {
+      let fillStyle;
+      switch (pacManFillMethod) {
+        case 'Pac-Man Color':
+          fillStyle = pacManColor;
+          break;
+        case 'Global Color Cycle':
+          fillStyle = `hsl(${COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Static)':
+          fillStyle = `hsl(${(this.x / canvasWidth) * MAX_HUE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Cycle Left)':
+          fillStyle = `hsl(${((this.x / canvasWidth) * MAX_HUE) + COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Grid Rainbow (Cycle Right)':
+          fillStyle = `hsl(${((this.x / canvasWidth) * MAX_HUE) - COLOR_CYCLE}, 100%, 50%)`;
+          break;
+        case 'Random Rainbow (Static)':
+          fillStyle = `hsl(${this.randRainbow}, 100%, 50%)`;
+          break;
+        case 'Random Rainbow (Cycle)':
+          fillStyle = `hsl(${this.randRainbow + COLOR_CYCLE}, 100%, 50%)`;
+          break;
+      }
+      return fillStyle;
+    }
+  }
+  //#endregion Classes
+
+  //#region SignalRGB Callbacks
+  function onscaleChanged() {
+    pacMan = new PacMan(scale * 10);
+  }
+
+  function onpelletScaleChanged() {
+    pacMan = new PacMan(scale * 10);
+  }
+
+  function onsingleGhostChanged() {
+    if (singleGhost && pacMan.ghosts.length > 1) {
+      pacMan.ghosts.splice(1, pacMan.ghosts.length - 1);
+    }
+  }
+
+  function onCanvasTapped(x, y) {
+    if (pacMan && progressOnKeyPress) {
+      for (let i = 0; i < progressPerKeyPress; i++) {
+        pacMan.update();
+      }
+    }
+  }
+  //#endregion SignalRGB Callbacks
+
+  //#region Helper Functions
+  function hexToRGBA(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  //#endregion Helper Functions
+
+  function update() {
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    COLOR_CYCLE = (COLOR_CYCLE + (colorCycleSpeed / 2)) % 360;
+
+    if (pacMan) {
+      pacMan.update();
+      pacMan.draw();
+    }
+
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(update);
+</script>
