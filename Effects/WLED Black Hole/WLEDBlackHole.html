@@ -1,0 +1,261 @@
+<head>
+  <title>WLED Black Hole</title>
+  <meta description="Black Hole effect from WLED recreated in SignalRGB."/>
+  <meta publisher="Derek Huber"/>
+  <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
+  <meta property="colorMode" label="Color Mode" type="combobox" values="Vertical Rainbow,Horizontal Rainbow,Outer + Inner Colors" default="Vertical Rainbow"/>
+  <meta property="rainbowCycleSpeed" label="Rainbow Cycle Speed" type="number" min="0" max="100" default="50"/>
+  <meta property="outerColor" label="Outer Color" type="color" min="0" max="360" default="#0000ff"/>
+  <meta property="innerColor" label="Inner Color" type="color" min="0" max="360" default="#8000ff"/>
+  <meta property="drawOrder" label="Draw Order" type="combobox" values="By Age (Mixed),Outer Ring On Top,Inner Ring On Top" default="Inner Ring On Top"/>
+  <meta property="centerColor" label="Center Color" type="color" min="0" max="360" default="#ffffff"/>
+  <meta property="drawCenter" label="Draw Center" type="boolean" default="1"/>
+  <meta property="pixelSize" label="Pixel Size" type="number" min="1" max="20" default="20"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="5" default="1"/>
+  <meta property="fadeRate" label="Fade Rate" type="number" min="1" max="10" default="3"/>
+  <meta property="outerDensity" label="Outer Density" type="number" min="0" max="64" default="8"/>
+  <meta property="outerYFrequency" label="Outer Y Frequency" type="number" min="0" max="31" default="16"/>
+  <meta property="outerXFrequency" label="Outer X Frequency" type="number" min="0" max="31" default="16"/>
+  <meta property="innerDensity" label="Inner Density" type="number" min="0" max="64" default="4"/>
+  <meta property="innerYFrequency" label="Inner Y Frequency" type="number" min="0" max="31" default="16"/>
+  <meta property="innerXFrequency" label="Inner X Frequency" type="number" min="0" max="31" default="16"/>
+</head>
+
+<body style="margin: 0; padding: 0;">
+  <canvas id="canvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  const MAX_HUE = 360;
+  const DrawOrder = {
+    ByAge: 'By Age (Mixed)',
+    OuterRingOnTop: 'Outer Ring On Top',
+    InnerRingOnTop: 'Inner Ring On Top',
+  };
+
+  let colorCycleHue = 0;
+  let columns = 32;
+  let rows = 20;
+  let pixels = [];
+
+  class Pixel {
+    constructor(x, y, width, height, fillStyle, type) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+      this.fillStyle = fillStyle;
+      this.type = type;
+      this.opacity = 1;
+    }
+
+    update() {
+      this.opacity = Math.max(0, this.opacity - 0.02 * fadeRate);
+    }
+
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = this.fillStyle;
+      ctx.globalAlpha = this.opacity;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+  }
+  Pixel.OUTER_TYPE = 0;
+  Pixel.INNER_TYPE = 1;
+
+  // WLED Black Hole effect
+  // https://github.com/Aircoookie/WLED/blob/main/wled00/FX.cpp#L4678
+  function addNewBlackHolePixels(array) {
+    const time = Date.now() / (Math.pow(2, (10 - speed)));
+
+    // Outer ring
+    for (let i = 0; i < outerDensity; i++) {
+      const x = beatSin8(outerXFrequency, 0, columns - 1, 0, ((i % 2) ? 128 : 0) + time * i) * pixelSize;
+      const y = beatSin8(outerYFrequency, 0, rows - 1, 0, ((i % 2) ? 192 : 64) + time * i) * pixelSize;
+      const fillStyle = getPixelFillStyle(x, y, Pixel.OUTER_TYPE);
+      array.push(new Pixel(x, y, pixelSize, pixelSize, fillStyle, Pixel.OUTER_TYPE));
+    }
+
+    // Inner ring
+    for (let i = 0; i < innerDensity; i++) {
+      const x = beatSin8(innerXFrequency, columns / 4, columns - 1 - columns / 4, 0, ((i % 2) ? 128 : 0) + time * i) * pixelSize;
+      const y = beatSin8(innerYFrequency, rows / 4, rows - 1 - rows / 4, 0, ((i % 2) ? 192 : 64) + time * i) * pixelSize;
+      const fillStyle = getPixelFillStyle(x, y, Pixel.INNER_TYPE);
+      array.push(new Pixel(x, y, pixelSize, pixelSize, fillStyle, Pixel.INNER_TYPE));
+    }
+  }
+
+  function getPixelFillStyle(x, y, pixelType) {
+    let fillStyle;
+    switch(colorMode) {
+      case 'Vertical Rainbow':
+        fillStyle = `hsl(${(x / canvasWidth) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
+        break;
+      case 'Horizontal Rainbow':
+        fillStyle = `hsl(${(y / canvasHeight) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
+        break;
+      case 'Outer + Inner Colors':
+        fillStyle = pixelType === Pixel.OUTER_TYPE ? outerColor : pixelType === Pixel.INNER_TYPE ? innerColor : '#ffffff';
+        break;
+    }
+    return fillStyle;
+  }
+
+  //#region FastLED Helpers 
+  // https://github.com/FastLED/FastLED/blob/master/src/lib8tion.h
+  function beatSin8(bpm, lowest = 0, highest = 255, timebase = 0, phaseOffset = 0) {
+    const beat = beat8(bpm, timebase);
+    const beatSin = sin8(beat + phaseOffset);
+    const rangeWidth = highest - lowest;
+    const scaledbeat = scale8(beatSin, rangeWidth);
+    const result = lowest + scaledbeat;
+    return result;
+  }
+
+  function beat8(bpm, timebase = 0) {
+    return beat16(bpm, timebase) >> 8;
+  }
+
+  function beat16(bpm, timebase = 0) {
+    if (bpm < 256) bpm <<= 8;
+    return beat88(bpm, timebase);
+  }
+
+  function beat88(bpm_88, timebase = 0) {
+    return ((Date.now() - timebase) * bpm_88 * 280) >> 16;
+  }
+
+  function sin8(x) {
+   return (Math.sin((x/128.0) * Math.PI) * 128) + 128;
+  }
+
+  function scale8(i, sc) {
+    return (i * sc) / 256;
+  }
+  //#endregion FastLED Helpers
+
+  //#region SignalRGB Callbacks
+  function onrainbowCycleSpeedChanged() {
+    if (rainbowCycleSpeed === 0) {
+      colorCycleHue = 0;
+    }
+  }
+
+  function onpixelSizeChanged() {
+    pixels = [];
+    columns = canvasWidth / pixelSize;
+    rows = canvasHeight / pixelSize;
+  }
+  //#endregion SignalRGB Callbacks
+
+  function update() {
+    // Background
+    ctx.save();
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Pixels
+    pixels = pixels.filter(pixel => {
+      if (pixel.opacity > 0) {
+          pixel.update();
+          return true;
+      }
+      return false;
+    });
+
+    addNewBlackHolePixels(pixels);
+
+    switch(drawOrder) {
+      case DrawOrder.ByAge:
+        pixels.forEach(pixel => pixel.draw());
+        break;
+      case DrawOrder.OuterRingOnTop:
+      case DrawOrder.InnerRingOnTop:
+        const outerPixels = [];
+        const innerPixels = [];
+        const length = pixels.length;
+        for (let i = 0; i < length; i++) {
+          const pixel = pixels[i];
+          if (pixel.type === Pixel.OUTER_TYPE) {
+            outerPixels.push(pixel);
+          } else if (pixel.type === Pixel.INNER_TYPE) {
+            innerPixels.push(pixel);
+          }
+        }
+        const topPixels = drawOrder === DrawOrder.OuterRingOnTop ? outerPixels : innerPixels;
+        const bottomPixels = drawOrder === DrawOrder.OuterRingOnTop ? innerPixels : outerPixels;
+        bottomPixels.forEach(pixel => pixel.draw());
+        topPixels.forEach(pixel => pixel.draw());
+        break;
+    }
+
+    // Center Pixel
+    if (drawCenter) {
+      const x = (canvasWidth - pixelSize) / 2;
+      const y = (canvasHeight - pixelSize) / 2;
+      ctx.fillStyle = centerColor;
+      ctx.fillRect(x, y, pixelSize, pixelSize);
+    }
+
+    colorCycleHue = (colorCycleHue + rainbowCycleSpeed / 20) % MAX_HUE;
+
+    ctx.restore();
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(update);
+</script>
+
+<!--
+  WLED MIT LICENSE
+
+  Copyright (c) 2016 Christian Schwinne
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+-->
+
+<!--
+  FastLED MIT LICENSE
+
+  Copyright (c) 2013 FastLED
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the "Software"), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+  the Software, and to permit persons to whom the Software is furnished to do so,
+  subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+  FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+  IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->

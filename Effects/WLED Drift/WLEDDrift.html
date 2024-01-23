@@ -1,0 +1,158 @@
+<head>
+  <title>WLED Drift</title>
+  <meta description="Drift effect from WLED recreated in SignalRGB."/>
+  <meta publisher="Derek Huber"/>
+  <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
+  <meta property="colorMode" label="Color Mode" type="combobox" values="Vertical Rainbow,Horizontal Rainbow,Color Cycle,Custom Color" default="Vertical Rainbow"/>
+  <meta property="colorCycleSpeed" label="Rainbow / Color Cycle Speed" type="number" min="0" max="100" default="50"/>
+  <meta property="customColor" label="Custom Color" type="color" min="0" max="360" default="#0000ff"/>
+  <meta property="pixelSize" label="Pixel Size" type="number" min="1" max="20" default="20"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="31" default="16"/>
+  <meta property="fadeRate" label="Fade Rate" type="number" min="1" max="10" default="3"/>
+</head>
+
+<body style="margin: 0; padding: 0;">
+  <canvas id="canvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  const MAX_HUE = 360;
+
+  let colorCycleHue = 0;
+  let columns = 32;
+  let rows = 20;
+  let pixels = [];
+
+  class Pixel {
+    constructor(x, y, width, height, fillStyle) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+      this.fillStyle = fillStyle;
+      this.opacity = 1;
+    }
+
+    update() {
+      this.opacity = Math.max(0, this.opacity - 0.02 * fadeRate);
+    }
+
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = this.fillStyle;
+      ctx.globalAlpha = this.opacity;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+  }
+
+  // WLED Drift effect
+  // https://github.com/Aircoookie/WLED/blob/main/wled00/FX.cpp#L4830
+  function addNewDriftPixels(array) {
+    const maxDim = Math.max(columns, rows) / 2;
+    const time = Date.now() / ((32 - speed) * (20 / pixelSize));
+
+    for (let i = 1; i < maxDim; i += 0.25) {
+      const angle = (time * (maxDim - i)) * (Math.PI / 180);
+      const x = ((columns >> 1) + Math.sin(angle) * i + (columns % 2)) * pixelSize - pixelSize / 2;
+      const y = ((rows >> 1) + Math.cos(angle) * i + (rows % 2)) * pixelSize - pixelSize / 2;
+      const fillStyle = getPixelFillStyle(x, y);
+      array.push(new Pixel(x, y, pixelSize, pixelSize, fillStyle));
+    }
+  }
+
+  function getPixelFillStyle(x, y) {
+    let fillStyle;
+    switch(colorMode) {
+      case 'Vertical Rainbow':
+        fillStyle = `hsl(${(x / canvasWidth) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
+        break;
+      case 'Horizontal Rainbow':
+        fillStyle = `hsl(${(y / canvasHeight) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
+        break;
+      case 'Color Cycle':
+        fillStyle = `hsl(${colorCycleHue}, 100%, 50%)`;
+        break;
+      case 'Custom Color':
+        fillStyle = customColor;
+        break;
+    }
+    return fillStyle;
+  }
+
+  //#region SignalRGB Callbacks
+  function oncolorModeChanged() {
+    if (colorCycleSpeed === 0) {
+      colorCycleHue = 0;
+    }
+  }
+
+  function oncolorCycleSpeedChanged() {
+    if (colorCycleSpeed === 0 && (colorMode === 'Vertical Rainbow' || colorMode === 'Horizontal Rainbow')) {
+      colorCycleHue = 0;
+    }
+  }
+
+  function onpixelSizeChanged() {
+    pixels = [];
+    columns = canvasWidth / pixelSize;
+    rows = canvasHeight / pixelSize;
+  }
+  //#endregion SignalRGB Callbacks
+
+  function update() {
+    // Background
+    ctx.save();
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Pixels
+    addNewDriftPixels(pixels);
+
+    pixels = pixels.filter(pixel => {
+      if (pixel.opacity > 0) {
+          pixel.update();
+          pixel.draw();
+          return true;
+      }
+      return false;
+    });
+
+    colorCycleHue = (colorCycleHue + colorCycleSpeed / 20) % MAX_HUE;
+
+    ctx.restore();
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(update);
+</script>
+
+<!--
+  WLED MIT LICENSE
+
+  Copyright (c) 2016 Christian Schwinne
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+-->
