@@ -3,7 +3,7 @@
   <meta description="Squeeze on in!"/>
   <meta publisher="Derek Huber"/>
   <meta property="colorMode" label="Color Mode" type="combobox"
-        values="Beach,Contemporary,Cottagecore,Dark Carnival,Kawaii,Mondrian,Neon,Ocean,Outrun,Random,Retro,Space,Summer,Vaporwave,3-Custom Colors,4-Custom Colors"
+        values="Beach,Contemporary,Cottagecore,Dark Carnival,Kawaii,Mondrian,Neon,Ocean,Outrun,Retro,Space,Summer,Vaporwave,Rainbow,Random,3-Custom Colors,4-Custom Colors"
         default="Dark Carnival" />
   <meta property="color1" label="Custom Color 1" type="color" default="#ff0000" min="0" max="360" />
   <meta property="color2" label="Custom Color 2" type="color" default="#0001ff" min="0" max="360" />
@@ -17,17 +17,25 @@
   <meta property="siteColor" label="Site Color" type="color" min="0" max="360" default="#000000"/>
 </head>
 <body style="margin: 0; padding: 0">
-  <canvas id="exCanvas" width="320" height="200"></canvas>
+  <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-  const canvas = document.getElementById("exCanvas");
+  const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
 
-  // Dark Carnival by me, Derek Huber.  All others by SignalRGB team.
-  const colorSchemes = [
+  const MAX_HUE = 360;
+  const DISTANCE_FORMULAS = {
+    'Euclidean': (x, y, site) => Math.sqrt(Math.pow(x - site.x, 2) + Math.pow(y - site.y, 2)),
+    'Manhattan': (x, y, site) => Math.abs(x - site.x) + Math.abs(y - site.y),
+    'Chebyshev': (x, y, site) => Math.max(Math.abs(x - site.x), Math.abs(y - site.y)),
+  };
+
+  const COLOR_SCHEMES_COLOR_COUNT = 6;
+  // Dark Carnival by me, Derek Huber.  All others by SignalRGB team.  HSL values, not RGB.
+  const COLOR_SCHEMES = [
     { name: "Beach",         colors: [[203, 68, 84], [186, 94, 44], [180, 81, 73], [45, 47, 44], [28, 67, 85], [151, 94, 75]] },
     { name: "Contemporary",  colors: [[210, 76, 23], [43, 100, 50], [195, 57, 53], [9, 82, 57], [22, 81, 78], [178, 45, 53]] },
     { name: "Cottagecore",   colors: [[276, 16, 37], [35, 54, 56], [61, 35, 37], [105, 11, 37], [28, 40, 49], [40, 92, 85]] },
@@ -36,7 +44,6 @@
     { name: "Mondrian",      colors: [[60, 100, 50], [60, 100, 50], [270, 100, 100], [220, 100, 50], [0, 100, 50], [35, 100, 100]] },
     { name: "Neon",          colors: [[186, 82, 42], [331, 66, 45], [38, 72, 62], [216, 64, 44], [228, 38, 60], [166, 37, 41]] },
     { name: "Ocean",         colors: [[193, 44, 17], [195, 31, 52], [194, 42, 30], [197, 45, 45], [193, 40, 70], [190, 50, 90]] },
-    { name: "Rainbow",       colors: [[0, 100, 50], [35, 100, 50], [60, 100, 50], [120, 100, 50], [220, 100, 50], [270, 100, 50]] },
     { name: "Outrun",        colors: [[286, 46, 22], [340, 67, 59], [49, 78, 62], [30, 78, 56], [227, 51, 56], [224, 77, 70]] },
     { name: "Retro",         colors: [[349, 100, 46], [41, 100, 55], [58, 100, 30], [199, 36, 46], [221, 100, 19], [3, 100, 36]] },
     { name: "Space",         colors: [[293, 84, 90], [271, 71, 36], [280, 81, 18], [269, 70, 26], [230, 42, 41], [218, 100, 47]] },
@@ -45,8 +52,6 @@
   ];
 
   let sites = [];
-  let lastSavedSiteCount;
-  let lastSavedColorMode;
   
   class Site {
     constructor(x, y, fillStyle) {
@@ -57,64 +62,73 @@
       this.dx = 0;
     }
 
-    UpdatePosition() {
+    updatePosition() {
       this.dx = (this.dx + Math.random() - 0.5) % speed;
       this.dy = (this.dy + Math.random() - 0.5) % speed;
       this.x += this.dx;
       this.y += this.dy;
 
+      if (colorMode === 'Rainbow') {
+        this.fillStyle = `hsl(${this.x / canvasWidth * MAX_HUE}, 100%, 50%)`;
+      }
+
       // Outside of canvas
       if (this.x < 0 || this.x > canvasWidth || this.y < 0 || this.y > canvasHeight) {
         this.x = getRandomInt(canvasWidth + 1);
         this.y = getRandomInt(canvasHeight + 1);
-        this.fillStyle = getColorModeFillStyle();
+        this.fillStyle = colorMode === 'Rainbow' ? `hsl(${this.x}, 100%, 50%)` : getColorModeFillStyle();
       }
     }
   }
 
-  function getRandomInt(max) {
-    return Math.floor(Math.random() * max);
+  function initSiteArray() {
+    sites = [];
+    for (let i = 0; i < siteCount; i++) {
+      sites.push(new Site(getRandomInt(canvasWidth + 1), getRandomInt(canvasHeight + 1), getColorModeFillStyle()));
+    }
   }
 
   function getColorModeFillStyle() {
     let fillStyle;
+    const customColors = [color1, color2, color3, color4];
     switch(colorMode) {
       case 'Beach': case 'Contemporary': case 'Cottagecore': case 'Dark Carnival': case 'Kawaii': case 'Mondrian': 
       case 'Neon': case 'Ocean': case 'Outrun': case 'Retro': case 'Space': case 'Summer': case 'Vaporwave':
-        let colorIndex = getRandomInt(6);
-        let colorScheme = colorSchemes.find(scheme => scheme.name == colorMode);
+        const colorScheme = COLOR_SCHEMES.find(scheme => scheme.name === colorMode);
+        const colorIndex = getRandomInt(COLOR_SCHEMES_COLOR_COUNT);
         fillStyle = `hsl(${colorScheme.colors[colorIndex][0]}, ${colorScheme.colors[colorIndex][1]}%, ${colorScheme.colors[colorIndex][2]}%)`;
         break;
       case 'Random':
-        fillStyle = `hsl(${getRandomInt(360)}, 100%, 50%)`;
+        fillStyle = `hsl(${getRandomInt(MAX_HUE)}, 100%, 50%)`;
         break;
       case '3-Custom Colors':
-        let rand3Color = getRandomInt(3);
-        if (rand3Color === 0) {
-          fillStyle = color1;
-        } else if (rand3Color === 1) {
-          fillStyle = color2;
-        } else {
-          fillStyle = color3;
-        }
+        var randColor = getRandomInt(3);
+        fillStyle = customColors[randColor];
         break;
       case '4-Custom Colors':
-        let rand4Color = getRandomInt(4);
-        if (rand4Color === 0) {
-          fillStyle = color1;
-        } else if (rand4Color === 1) {
-          fillStyle = color2;
-        } else if (rand4Color === 2) {
-          fillStyle = color3;
-        } else {
-          fillStyle = color4;
-        }
+        var randColor = getRandomInt(4);
+        fillStyle = customColors[randColor];
         break;
+      default:
+        console.error(`\"${colorMode}\" Color Mode not implemented...`);
     }
     return fillStyle;
   }
 
-  // colorN callbacks - SignalRGB calls these automatically
+  // [0, max)
+  function getRandomInt(max) {
+    return Math.floor(Math.random() * max);
+  }
+
+  //#region SignalRGB property callbacks
+  function oncolorModeChanged() {
+    initSiteArray();
+  }
+
+  function onsiteCountChanged() {
+    initSiteArray();
+  }
+
   function oncolor1Changed() {
     if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
       initSiteArray();
@@ -134,57 +148,37 @@
   }
 
   function oncolor4Changed() {
-    if (['3-Custom Colors','4-Custom Colors'].includes(colorMode)) {
+    if (colorMode === '4-Custom Colors') {
       initSiteArray();
     }
   }
-
-  function initSiteArray() {
-    sites = [];
-    for (let i = 0; i < siteCount; i++) {
-      sites.push(new Site(getRandomInt(canvasWidth + 1), getRandomInt(canvasHeight + 1), getColorModeFillStyle()));
-    }
-  }
+  //#endregion SignalRGB property callbacks
 
   function update() {
 
-    if (lastSavedSiteCount !== siteCount || lastSavedColorMode !== colorMode) {
-      lastSavedSiteCount = siteCount;
-      lastSavedColorMode = colorMode;
-      initSiteArray();
-    }
-
     // Update positions
-    sites.forEach(site => site.UpdatePosition());
+    sites.forEach(site => site.updatePosition());
 
     // Brute force - calculate closest site for each pixel and draw.
     // There are algorithms that are much more efficient, but for a 320x200 canvas inside an RGB application, this performs well enough and is easier to understand.
     for (let x = 0; x < canvasWidth; x += scale) {
 			for (let y = 0; y < canvasHeight; y += scale) {
         let min = null;
-        let closestSite = null;
+        let closestSiteIndex = null;
 
         // Calculate
         for (let i = 0; i < siteCount; i++) {
-          let distance;
-
-          if (distanceFormula === 'Euclidean') {
-            distance = Math.sqrt(Math.pow(x - sites[i].x, 2) + Math.pow(y - sites[i].y, 2));
-          } else if (distanceFormula === 'Manhattan') {
-            distance = Math.abs(x - sites[i].x) + Math.abs(y - sites[i].y);
-          } else if (distanceFormula === 'Chebyshev') {
-            distance = Math.max(Math.abs(x - sites[i].x), Math.abs(y - sites[i].y));
-          }
+          const distance = DISTANCE_FORMULAS[distanceFormula](x, y, sites[i]);
 
           // New closest
           if (min === null || distance < min) {
             min = distance;
-            closestSite = i;
+            closestSiteIndex = i;
           }
         }
 
         // Draw
-        ctx.fillStyle = sites[closestSite].fillStyle;
+        ctx.fillStyle = sites[closestSiteIndex].fillStyle;
         ctx.fillRect(x, y, scale, scale);
 			}
 		}
@@ -198,5 +192,10 @@
     window.requestAnimationFrame(update);
   }
 
-  window.requestAnimationFrame(update);
+  function onEngineReady() {
+    initSiteArray();
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(onEngineReady);
 </script>

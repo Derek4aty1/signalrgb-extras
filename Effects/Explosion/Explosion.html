@@ -7,42 +7,49 @@
 	<meta property="rainbow" label="Rainbow" type="boolean" default="1"/>
 	<meta property="colorCycle" label="Color Cycle" type="boolean" default="0"/>
 	<meta property="colorCycleSpeed" label="Color Cycle Speed" type="number" min="1" max="10" default="5"/>
-	<meta property="scale" label="Scale (Lower = HIGH CPU)" type="number" min="1" max="20" default="10" />
-	<meta property="speed" label="Speed" type="number" min="1" max="10" default="5" />
-	<meta property="frequency" label="Frequency" type="number" min="1" max="5" default="4" />
-	<meta property="noiseLevel" label="Noise Level" type="number" min="1" max="5" default="1" />
+	<meta property="scale" label="Scale" tooltip="HIGH CPU Impact" type="number" min="1" max="20" default="10"/>
+	<meta property="speed" label="Speed" type="number" min="1" max="10" default="5"/>
+	<meta property="frequency" label="Frequency" type="number" min="1" max="5" default="4"/>
+	<meta property="noiseLevel" label="Noise Level" type="number" min="1" max="5" default="1"/>
 	<meta property="lightnessFilter" label="Lightness Filter" type="number" min="1" max="49" default="10">
 </head>
 <body style="margin: 0; padding: 0;">
-    <canvas id="exCanvas" width="320" height="200"></canvas>
+    <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-	let c = document.getElementById("exCanvas");
-    let ctx = c.getContext("2d");
+	const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+	const canvasWidth = canvas.width;
+	const canvasHeight = canvas.height;
+
+	const MAX_HUE = 360;
+
 	let colorCycleHue = 0;
 
-	function Noise(t) {
-		let temp = Math.sin(t) * 45673.1234;
+	//#region Noise Functions
+	function noise(t) {
+		const temp = Math.sin(t) * 45673.1234;
 		return temp - Math.floor(temp);
 	}
 
-	function SmoothNoise(t) {
-		return (Noise(t) / 2) + (Noise(t - 1) / 4) + (Noise(t + 1) / 4);
+	function smoothNoise(t) {
+		return (noise(t) / 2) + (noise(t - 1) / 4) + (noise(t + 1) / 4);
 	}
 
-	function InterpolateNoise(t) {
-		let fractT = t - Math.floor(t);
-		let intT0  = t - fractT;
-		let intT1  = intT0 + 1;
-		return (SmoothNoise(intT0) * (1 - fractT) + SmoothNoise(intT1) * fractT);
+	function interpolateNoise(t) {
+		const fractT = t - Math.floor(t);
+		const intT0  = t - fractT;
+		const intT1  = intT0 + 1;
+		return (smoothNoise(intT0) * (1 - fractT) + smoothNoise(intT1) * fractT);
 	}
 
-	function FBM(t) {
+	// Fractional Brownian motion
+	function fbm(t) {
 		let p = 0;
 
 		for (let i = 0; i < noiseLevel; i++) {
-			p += (1 / Math.pow(2, i+1)) * InterpolateNoise(t);
+			p += (1 / Math.pow(2, i+1)) * interpolateNoise(t);
 			if (i !== noiseLevel - 1) {
 				t *= 2;
 			}
@@ -51,155 +58,136 @@
 		
 		return p;
 	}
+	//#endregion Noise Functions
 
-	function PointHue(angle) {
-		let t = (angle % Math.PI) / Math.PI;
-		if (t < 0)
-			t *= -1;
-
-		let h = 360 * t;
-		return h;
+	//#region Color Conversion Functions
+	function hexToRGB(hex) {
+		const color = {
+			r: parseInt(hex.slice(1, 3), 16),
+			g: parseInt(hex.slice(3, 5), 16),
+			b: parseInt(hex.slice(5, 7), 16)
+		};
+		return color;
 	}
 
 	// https://www.rapidtables.com/convert/color/hsv-to-rgb.html
-	function HSVToRGB(h, s, v) {
-		h = h % 360;
-		let chroma = v * s;
-		let hPrime = h / 60;
-		let x = chroma * (1 - Math.abs((hPrime % 2) - 1));
-		let min = v - chroma;
+	function hsvToRGB(h, s, v) {
+		h = h % MAX_HUE;
+		const chroma = v * s;
+		const hPrime = h / 60;
+		const x = chroma * (1 - Math.abs((hPrime % 2) - 1));
+		const min = v - chroma;
 
 		let r = 0; let g = 0; let b = 0;
-		
-		if(hPrime < 1) {
-			r = chroma;
-			g = x;
-		} else if (hPrime < 2) {
-			r = x;
-			g = chroma;
-		} else if (hPrime < 3) {
-			g = chroma;
-			b = x;
-		} else if (hPrime < 4) {
-			g = x;
-			b = chroma;
-		} else if (hPrime < 5) {
-			r = x;
-			b = chroma;
-		} else if (hPrime <= 6) {
-			r = chroma;
-			b = x;
+
+		switch (Math.floor(hPrime)) {
+			case 0: r = chroma; g = x; break;
+			case 1: r = x; g = chroma; break;
+			case 2: g = chroma; b = x; break;
+			case 3: g = x; b = chroma; break;
+			case 4: r = x; b = chroma; break;
+			case 5: r = chroma; b = x; break;
 		}
 
-		r = Math.floor((r+min)*255); 
-		g = Math.floor((g+min)*255); 
-		b = Math.floor((b+min)*255);
+		r = Math.floor((r + min) * 255); 
+		g = Math.floor((g + min) * 255); 
+		b = Math.floor((b + min) * 255);
 
-		let colors = [];
-		colors['r'] = r; 
-		colors['g'] = g; 
-		colors['b'] = b;
-
-		return colors;
-	}
-
-	function HexToRGB(hex) {
-		let colors = [];
-		colors['r'] = parseInt(hex.slice(1, 3), 16);
-		colors['g'] = parseInt(hex.slice(3, 5), 16);
-		colors['b'] = parseInt(hex.slice(5, 7), 16);
-
-		return colors;
+		return { r, g, b };
 	}
 
 	// L from https://www.rapidtables.com/convert/color/rgb-to-hsl.html
-	function GetLightness(rgbColor) {
-		let rPrime = rgbColor['r'] / 255;
-		let gPrime = rgbColor['g'] / 255;
-		let bPrime = rgbColor['b'] / 255;
+	function getLightness(rgbColor) {
+		const rPrime = rgbColor.r / 255;
+		const gPrime = rgbColor.g / 255;
+		const bPrime = rgbColor.b / 255;
+		const Cmax = Math.max(rPrime, gPrime, bPrime);
+		const Cmin = Math.min(rPrime, gPrime, bPrime);
+		const L = (Cmax + Cmin) / 2;
+		return L * 100; // To compare against whole numbers instead of [0, 1]
+	}
+	//#endregion Color Conversion Functions
 
-		let Cmax = Math.max(rPrime, gPrime, bPrime);
-		let Cmin = Math.min(rPrime, gPrime, bPrime);
+	function pointHue(angle) {
+		let t = (angle % Math.PI) / Math.PI;
+		if (t < 0) {
+			t *= -1;
+		}
 
-		let L = (Cmax + Cmin) / 2;
-
-		return L * 100; // To compare against whole numbers instead of 0 .. 1
+		const h = MAX_HUE * t;
+		return h;
 	}
     
-	function DrawPixel(x, y, color) {
-        ctx.fillStyle = 'rgb(' + color['r'] + ',' + color['g'] + ',' + color['b'] + ')';
-      	ctx.fillRect(x, y, scale, scale);
+	function drawPixel(x, y, fillStyle) {
+		ctx.save();
+		ctx.translate(x, y);
+        ctx.fillStyle = fillStyle;
+      	ctx.fillRect(0, 0, scale, scale);
+		ctx.restore();
     }
 
-    function Update() {
+    function update() {
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, 320, 200);
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-		if (colorCycleHue > 360)
-            colorCycleHue = 0;
-        else
-            colorCycleHue += (colorCycleSpeed / 2);
+		colorCycleHue = (colorCycleHue + colorCycleSpeed / 2) % MAX_HUE;
 
-		let backgroundRGBColor = HexToRGB(backgroundColor);
-		let backgroundLightness = GetLightness(backgroundRGBColor);
-
-		for (let x = 0; x < 320; x += scale) {
-			for (let y = 0; y < 200; y += scale) {
-
-				let time = performance.now() / 1000;
-				time *= (speed / 4);
-
-				let uv = [];
-				uv['x'] = -1 + (2 * (x / 320));
-				uv['y'] = -1 + (2 * (y / 200));
-				uv['x'] *= 1.6 // Canvas dimensions ratio (x / y)
+		const backgroundRGBColor = hexToRGB(backgroundColor);
+		const time = (performance.now() / 1000) * (speed / 4);
+		
+		for (let x = 0; x < canvasWidth; x += scale) {
+			for (let y = 0; y < canvasHeight; y += scale) {
+				const point = { 
+					x: -1 + (2 * (x / canvasWidth)), 
+					y: -1 + (2 * (y / canvasHeight))
+				};
+				point.x *= (canvasWidth / canvasHeight);
 				
-				let point = [];
-				point['x'] = uv['x'];
-				point['y'] = uv['y'];
-				let len = Math.sqrt(Math.pow(point['x'], 2) + Math.pow(point['y'], 2));
-				let angle = Math.atan2(point['y'], point['x']);
+				const len = Math.sqrt(Math.pow(point.x, 2) + Math.pow(point.y, 2));
+				const angle = Math.atan2(point.y, point.x);
 				
-				let R = ((time % (7 - frequency)) * (1.25)) - FBM(angle * 20);
-				let d = Math.abs(len - R);
+				const R = ((time % (7 - frequency)) * (1.25)) - fbm(angle * 20);
+				const d = Math.abs(len - R);
 				let t = Math.min(Math.max(d * 2, 0), 1);
 				t *= t * (3 - 2 * t);
 
-				let rgbColor = [];
+				let pixelColor = { r: 0, g: 0, b: 0 };
 
 				// Being verbose here for readability
-				if (rainbow && !colorCycle)
-					rgbColor = HSVToRGB(PointHue(angle), 1, 1); // Rainbow
-				else if (!rainbow && colorCycle)
-					rgbColor = HSVToRGB(colorCycleHue, 1, 1); // Color Cycle
-				else if (rainbow && colorCycle)
-					rgbColor = HSVToRGB(PointHue(angle) + colorCycleHue, 1, 1); // Both
-				else
-					rgbColor = HexToRGB(color); // Neither - Color param instead
+				if (rainbow && !colorCycle) {
+					pixelColor = hsvToRGB(pointHue(angle), 1, 1); // Rainbow
+				} else if (!rainbow && colorCycle) {
+					pixelColor = hsvToRGB(colorCycleHue, 1, 1); // Color Cycle
+				} else if (rainbow && colorCycle) {
+					pixelColor = hsvToRGB(pointHue(angle) + colorCycleHue, 1, 1); // Both
+				} else {
+					pixelColor = hexToRGB(color); // Neither - Color param instead
+				}
 				
-				rgbColor['r'] *= (1 - t);
-				rgbColor['g'] *= (1 - t);
-				rgbColor['b'] *= (1 - t);
+				pixelColor.r *= (1 - t);
+				pixelColor.g *= (1 - t);
+				pixelColor.b *= (1 - t);
 
 				// Filter out darker pixels based on Lightness Filter slider
-				let pixelLightness = GetLightness(rgbColor);
-				if (pixelLightness < lightnessFilter)
-					rgbColor = backgroundRGBColor;
+				const pixelLightness = getLightness(pixelColor);
+				if (pixelLightness < lightnessFilter) {
+					pixelColor = backgroundRGBColor;
+				}
 
-				// Draw pixels using Scale slider as the pixel size
-				DrawPixel(x, y, rgbColor);
+				// Draw
+				const fillStyle = `rgb(${pixelColor.r}, ${pixelColor.g}, ${pixelColor.b})`;
+				drawPixel(x, y, fillStyle);
 			}
 		}
 
-        window.requestAnimationFrame(Update);
+        window.requestAnimationFrame(update);
     }
 	
-    window.requestAnimationFrame(Update);
-
+    window.requestAnimationFrame(update);
 </script>
 
 <!--
 	Base concept and math logic was copied from https://www.shadertoy.com/view/Mds3zM and translated to JavaScript here, with lots of other changes as well.
-	Since the canvas resolution is static, chunks of math were either finetuned or removed, which cuts down on compute time a bit.  
+	Since the canvas resolution is static, chunks of math were either finetuned or removed, which cuts down on compute time a bit.
 	Other math changes have been made as well, again, for better performance.  Lastly, tons of customizability has been added.
 -->
