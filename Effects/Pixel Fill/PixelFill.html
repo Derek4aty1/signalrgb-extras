@@ -26,17 +26,18 @@
     <meta property="endY" label="Gradient End Y Position" type="number" min="0" max="200" default="0"/>
 </head>
 <body style="margin: 0; padding: 0;">
-    <canvas id="exCanvas" width="320" height="200"></canvas>
+    <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-    const canvas = document.getElementById("exCanvas");
+    const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const canvasWidth = canvas.width;
     const canvasHeight = canvas.height;
 
     // Since we are drawing semi-transparent over semi-transparent for performance, ~0.5 is the value to stop at for opaque
-    const compoundedOpacityOpaque = 0.5;
+    const COMPOUNDED_OPACITY_OPAQUE = 0.5;
+    const MAX_HUE = 360;
 
     let grid = null;
     let columnCount = 0;
@@ -44,6 +45,7 @@
     let currentPixels = 0;
     let totalPixels = 0;
     let globalGridOpacity = 0;
+    let markForFillFunction = () => {};
     let restarting = false;
 
     // For Fill Methods
@@ -56,8 +58,8 @@
         down: 4
     };
 
-    // For Fill Colors
-    let gradient = null;
+    // For Gradient Fill Colors
+    let fillGradient = null;
 
     class Pixel {
         constructor(xCoord, yCoord) {
@@ -68,13 +70,18 @@
         }
 
         draw() {
-            if (instantFill || this.opacity >= compoundedOpacityOpaque) {
+            if (instantFill || this.opacity >= COMPOUNDED_OPACITY_OPAQUE) {
                 this.opacity = 1;
             }
 
             ctx.save();
             ctx.globalAlpha = this.opacity;
+            ctx.fillStyle = this.getFillStyle();
+            ctx.fillRect(this.xCoord, this.yCoord, scale, scale);
+            ctx.restore();
+        }
 
+        getFillStyle() {
             let fillStyle;
             switch(fillColor) {
                 case 'Single Color':
@@ -83,23 +90,20 @@
                 case '2-Color Gradient':
                 case '3-Color Gradient':
                 case '4-Color Gradient':
-                    fillStyle = gradient;
+                    fillStyle = fillGradient;
                     break;
                 case 'Vertical Rainbow':
-                    var hue = (this.xCoord / canvasWidth) * 360;
+                    var hue = (this.xCoord / canvasWidth) * MAX_HUE;
                     fillStyle = `hsl(${hue}, 100%, 50%)`;
                     break;
                 case 'Horizontal Rainbow':
-                    var hue = (this.yCoord / canvasHeight) * 360;
+                    var hue = (this.yCoord / canvasHeight) * MAX_HUE;
                     fillStyle = `hsl(${hue}, 100%, 50%)`;
                     break;
                 default:
                     console.error(`\"${fillColor}\" Fill Color not implemented...`);
             }
-            ctx.fillStyle = fillStyle;
-            
-            ctx.fillRect(this.xCoord, this.yCoord, scale, scale);
-            ctx.restore();
+            return fillStyle;
         }
     }
 
@@ -117,11 +121,27 @@
             }
         }
 
-        if (fillMethod === 'Snake') {
-            initSnake();
-        } else if (['Inward Spiral', 'Outward Spiral'].includes(fillMethod)) {
-            initSpiral();
-        }
+        switch(fillMethod) {
+                case 'Random':
+                    markForFillFunction = randomMarkForFill;
+                    break;
+                case 'Snake':
+                    initSnake();
+                    markForFillFunction = snakeMarkForFill;
+                    break;
+                case 'Inward Spiral':
+                    initSpiral();
+                    markForFillFunction = inwardSpiralMarkForFill;
+                    break;
+                case 'Outward Spiral':
+                    initSpiral();
+                    markForFillFunction = outwardSpiralMarkForFill;
+                    break;
+                default:
+                    console.error(`\"${fillMethod}\" Fill Method not implemented...`);
+                    markForFillFunction = () => {};
+            }
+
         drawEntireGrid();
     }
 
@@ -155,7 +175,7 @@
     }
 
     function oncolor1Changed() {
-        if (!restarting && ['Single Color', '2-Color Gradient', '3-Color Gradient', '4-Color Gradient'].includes(fillColor)) {
+        if (['Single Color', '2-Color Gradient', '3-Color Gradient', '4-Color Gradient'].includes(fillColor)) {
             updateLinearGradient();
             if (!restarting) {
                 drawEntireGrid();
@@ -164,7 +184,7 @@
     }
 
     function oncolor1PosChanged() {
-        if (!restarting && ['2-Color Gradient', '3-Color Gradient', '4-Color Gradient'].includes(fillColor)) {
+        if (['2-Color Gradient', '3-Color Gradient', '4-Color Gradient'].includes(fillColor)) {
             updateLinearGradient();
             if (!restarting) {
                 drawEntireGrid();
@@ -261,10 +281,27 @@
             }
         }
     }
-    //#endregion
+    //#endregion SignalRGB property callbacks
 
+    function updateLinearGradient() {
+        fillGradient = ctx.createLinearGradient(startX, startY, endX, endY);
 
-    //#region Helpers for update function and callback functions
+        if (fillColor === '2-Color Gradient') {
+            fillGradient.addColorStop(color1Pos / canvasWidth, color1);
+            fillGradient.addColorStop(color2Pos / canvasWidth, color2);
+        } else if (fillColor === '3-Color Gradient') {
+            fillGradient.addColorStop(color1Pos / canvasWidth, color1);
+            fillGradient.addColorStop(color2Pos / canvasWidth, color2);
+            fillGradient.addColorStop(color3Pos / canvasWidth, color3);
+        } else if (fillColor === '4-Color Gradient') {
+            fillGradient.addColorStop(color1Pos / canvasWidth, color1);
+            fillGradient.addColorStop(color2Pos / canvasWidth, color2);
+            fillGradient.addColorStop(color3Pos / canvasWidth, color3);
+            fillGradient.addColorStop(color4Pos / canvasWidth, color4);
+        }
+    }
+
+    //#region Inits
     function initGrid() {
         grid = [];
         currentPixels = 0;
@@ -314,39 +351,9 @@
             };
         }
     }
+    //#endregion Inits
 
-    function updateLinearGradient() {
-        gradient = ctx.createLinearGradient(startX, startY, endX, endY);
-
-        if (fillColor === '2-Color Gradient') {
-            gradient.addColorStop(color1Pos / canvasWidth, color1);
-            gradient.addColorStop(color2Pos / canvasWidth, color2);
-        } else if (fillColor === '3-Color Gradient') {
-            gradient.addColorStop(color1Pos / canvasWidth, color1);
-            gradient.addColorStop(color2Pos / canvasWidth, color2);
-            gradient.addColorStop(color3Pos / canvasWidth, color3);
-        } else if (fillColor === '4-Color Gradient') {
-            gradient.addColorStop(color1Pos / canvasWidth, color1);
-            gradient.addColorStop(color2Pos / canvasWidth, color2);
-            gradient.addColorStop(color3Pos / canvasWidth, color3);
-            gradient.addColorStop(color4Pos / canvasWidth, color4);
-        }
-    }
-
-    function drawEntireGrid() {
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        for (let x = 0; x < columnCount; x++) {
-			for (let y = 0; y < rowCount; y++) {
-                if (grid[x][y].touched) {
-                    grid[x][y].opacity = 1;
-                    grid[x][y].draw();
-                }
-            }
-        }
-    }
-
+    //#region Main Grid Functions
     function startNewGrid() {
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -369,6 +376,54 @@
         }
     }
 
+    function drawEntireGrid() {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        for (let x = 0; x < columnCount; x++) {
+			for (let y = 0; y < rowCount; y++) {
+                if (grid[x][y].touched) {
+                    grid[x][y].opacity = 1;
+                    grid[x][y].draw();
+                }
+            }
+        }
+    }
+
+    function drawUnfinishedPixelsAndCheckForRestart() {
+        let filling = false;
+        for (let x = 0; x < columnCount; x++) {
+            for (let y = 0; y < rowCount; y++) {
+                if (grid[x][y].touched === false) {
+                    filling = true;
+                } else {
+                    if (grid[x][y].opacity < COMPOUNDED_OPACITY_OPAQUE) {
+                        filling = true;
+                        grid[x][y].opacity += 0.005 * fadeInSpeed;
+                        grid[x][y].draw();
+                    }
+                }
+            }
+        }
+
+        if (filling === false) {
+            restarting = true;
+            globalGridOpacity = 0;
+        }
+    }
+    
+    function drawFadeOutFrame() {
+        globalGridOpacity += 0.005 * fadeOutSpeed;
+        if (globalGridOpacity >= COMPOUNDED_OPACITY_OPAQUE) {
+            globalGridOpacity = 1;
+        }
+        ctx.globalAlpha = globalGridOpacity;
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+    //#endregion Main Grid Functions
+
+    //#region Fill Method Functions
     function randomMarkForFill() {
         let i = 0;
         while (i < fillSpeed * 10 / scale && currentPixels < totalPixels) {
@@ -506,80 +561,32 @@
             }
         }
     }
-
-    function drawUnfinishedPixelsAndCheckForRestart() {
-        let filling = false;
-        for (let x = 0; x < columnCount; x++) {
-            for (let y = 0; y < rowCount; y++) {
-                if (grid[x][y].touched === false) {
-                    filling = true;
-                } else {
-                    if (grid[x][y].opacity < compoundedOpacityOpaque) {
-                        filling = true;
-                        grid[x][y].opacity += 0.005 * fadeInSpeed;
-                        grid[x][y].draw();
-                    }
-                }
-            }
-        }
-
-        if (filling === false) {
-            restarting = true;
-            globalGridOpacity = 0;
-        }
-    }
-    
-    function drawFadeOutFrame() {
-        globalGridOpacity += 0.005 * fadeOutSpeed;
-        if (globalGridOpacity >= compoundedOpacityOpaque) {
-            globalGridOpacity = 1;
-        }
-        ctx.globalAlpha = globalGridOpacity;
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    }
-    //#endregion
-
+    //#endregion Fill Method Functions
 
     // The background is drawn only at the beginning of each new grid cycle, and each Pixel is
     // drawn only until it is completely opaque.  If color params change, drawEntireGrid() 
     // is called to update the colors.  Doing it this way saves a bunch of processing power,
     // especially when scale is small.
     function update() {
-        // For first run
-        if (grid === null) {
-            onscaleChanged();
-        }
 
-        if (restarting === true) { // Fading out/starting new grid
-            if (instantRestart || globalGridOpacity >= compoundedOpacityOpaque) {
+        if (!restarting) { // Filling grid and drawing
+            markForFillFunction();
+            drawUnfinishedPixelsAndCheckForRestart();
+        } else { // Fading out/starting new grid
+            if (instantRestart || globalGridOpacity >= COMPOUNDED_OPACITY_OPAQUE) {
                 startNewGrid();
             } else {
                 drawFadeOutFrame();
             }
-        } else { // Filling grid and drawing
-            switch(fillMethod) {
-                case 'Random':
-                    randomMarkForFill();
-                    break;
-                case 'Snake':
-                    snakeMarkForFill();
-                    break;
-                case 'Inward Spiral':
-                    inwardSpiralMarkForFill();
-                    break;
-                case 'Outward Spiral':
-                    outwardSpiralMarkForFill();
-                    break;
-                default:
-                    console.error(`\"${fillMethod}\" Fill Method not implemented...`);
-            }
-
-            drawUnfinishedPixelsAndCheckForRestart();
         }
         
         window.requestAnimationFrame(update);
     }
+
+    function onEngineReady() {
+        onscaleChanged();
+        window.requestAnimationFrame(update);
+    }
     
-    window.requestAnimationFrame(update);
+    window.requestAnimationFrame(onEngineReady);
 </script>
