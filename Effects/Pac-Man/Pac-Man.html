@@ -6,32 +6,33 @@
   <meta property="speed" label="Speed" type="number" min="1" max="10" default="3"/>
   <meta property="colorCycleSpeed" label="Color Cycle Speed" tooltip="Used for Cycle Fill Methods" type="number" min="1" max="10" default="5"/>
   <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000040"/>
-  <meta property="pacManFillMethod" label="Pac-Man Fill Method" type="combobox" 
-    values="Pac-Man Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
-    default="Pac-Man Color"/>
+  <meta property="pacManFillMethod" label="Pac-Man Fill Method" type="combobox"
+        values="Pac-Man Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+        default="Pac-Man Color"/>
   <meta property="pacManColor" label="Pac-Man Color" type="color" min="0" max="360" default="#ffff00"/>
   <meta property="drawPellets" label="Draw Pellets" type="boolean" default="1"/>
   <meta property="pelletScale" label="Pellet Scale" type="number" min="1" max="10" default="2"/>
-  <meta property="pelletFillMethod" label="Pellet Fill Method" type="combobox" 
-    values="Pellet Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
-    default="Pellet Color"/>
+  <meta property="pelletFillMethod" label="Pellet Fill Method" type="combobox"
+        values="Pellet Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+        default="Pellet Color"/>
   <meta property="pelletColor" label="Pellet Color" type="color" min="0" max="360" default="#fffeab"/>
   <meta property="drawGhosts" label="Draw Ghosts" type="boolean" default="1"/>
   <meta property="singleGhost" label="Single Ghost" type="boolean" default="0"/>
-  <meta property="ghostFillMethod" label="Ghost Fill Method" type="combobox" 
-    values="Original Colors,Ghost Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
-    default="Original Colors"/>
+  <meta property="ghostFillMethod" label="Ghost Fill Method" type="combobox"
+        values="Original Colors,Ghost Color,Global Color Cycle,Grid Rainbow (Static),Grid Rainbow (Cycle Left),Grid Rainbow (Cycle Right),Random Rainbow (Static),Random Rainbow (Cycle)"
+        default="Original Colors"/>
   <meta property="ghostColor" label="Ghost Color" type="color" min="0" max="360" default="#ff0000"/>
   <meta property="progressOnKeyPress" label="Progress On Key Press" type="boolean" default="0"/>
   <meta property="progressPerKeyPress" label="Progress Per Key Press" type="number" min="1" max="10" default="2"/>
 </head>
+
 <body style="margin: 0; padding: 0;">
   <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
 
@@ -230,7 +231,7 @@
       this.x = 0 - (2 * this.diameter);
       this.y = 0 + this.pelletYOffset + (this.pelletSize / 2);
       this.currentRow = 0;
-      this.maxMouthSize =  Math.PI / 3.5;
+      this.maxMouthSize = Math.PI / 3.5;
       this.mouthSize = 0;
       this.states = {
         isMouthOpening: true,
@@ -337,12 +338,12 @@
         this.checkForEatenPellets();
       }
     }
-    
+
     updateGhosts() {
       for (let i = this.ghosts.length - 1; i >= 0; i--) {
         const ghost = this.ghosts[i];
         ghost.updatePosition();
-        
+
         if ((ghost.isMovingRight && ghost.x >= canvasWidth + (2 * this.diameter)) // Past right canvas wall
           || (!ghost.isMovingRight && ghost.x <= 0 - (2 * this.diameter))) { // Past left canvas wall
           this.ghosts.splice(i, 1);
@@ -364,7 +365,7 @@
       const distance = Math.sqrt((pelletMiddleX - this.x) ** 2 + (pelletMiddleY - this.y) ** 2);
       return distance < this.radius
         || ((this.states.isMovingRight && pellet.x <= this.x)
-        || (!this.states.isMovingRight && pellet.x >= this.x)); // Catch alls for tiny scale + high speed
+          || (!this.states.isMovingRight && pellet.x >= this.x)); // Catch alls for tiny scale + high speed
     }
 
     draw() {
@@ -379,9 +380,9 @@
 
     drawPellets() {
       this.pelletGrid.forEach((row) => {
-          row.forEach((pellet, columnIndex) => {
-            pellet.draw(columnIndex, row.length, this.pelletOpacity);
-          });
+        row.forEach((pellet, columnIndex) => {
+          pellet.draw(columnIndex, row.length, this.pelletOpacity);
+        });
       });
     }
 

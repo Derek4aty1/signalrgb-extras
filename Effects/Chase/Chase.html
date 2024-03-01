@@ -1,367 +1,367 @@
 <head>
-    <title>Chase</title>
-    <meta description="The light chases itself.  For layout setup, the squares and fans on the sides are 50x50 pixels.  Each strip in the center is ~37 pixels wide.">
-    <meta publisher="Derek Huber">
-    <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
-    <meta property="color1" label="Color 1" type="color" min="0" max="360" default="#40ff00"/>
-    <meta property="color2" label="Color 2" type="color" min="0" max="360" default="#870eff"/>
-    <meta property="speed" label="Speed" type="number" min="1" max="10" default="5"/>
-    <meta property="stripGap" label="Strip Gap" type="number" min="0" max="200" step="5" default="100"/>
-    <meta property="innerFanColor" label="Inner Fan Color" type="combobox" values="Other Color,Same Color,Background Color" default="Other Color"/>
-    <meta property="fanIncludeOtherColor" label="Fade To Other Color For Fans" tooltip="Ignored if Rainbow Mode is on" type="boolean" default="0"/>
-    <meta property="fanInnerPercentCovered" label="Fan Inner Percent Covered" type="number" min="0" max="100" default="50"/>
-    <meta property="rainbow" label="Rainbow Mode" type="boolean" default="0"/>
+  <title>Chase</title>
+  <meta description="The light chases itself.  For layout setup, the squares and fans on the sides are 50x50 pixels.  Each strip in the center is ~37 pixels wide."/>
+  <meta publisher="Derek Huber"/>
+  <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
+  <meta property="color1" label="Color 1" type="color" min="0" max="360" default="#40ff00"/>
+  <meta property="color2" label="Color 2" type="color" min="0" max="360" default="#870eff"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="10" default="5"/>
+  <meta property="stripGap" label="Strip Gap" type="number" min="0" max="200" step="5" default="100"/>
+  <meta property="innerFanColor" label="Inner Fan Color" type="combobox" values="Other Color,Same Color,Background Color" default="Other Color"/>
+  <meta property="fanIncludeOtherColor" label="Fade To Other Color For Fans" tooltip="Ignored if Rainbow Mode is on" type="boolean" default="0"/>
+  <meta property="fanInnerPercentCovered" label="Fan Inner Percent Covered" type="number" min="0" max="100" default="50"/>
+  <meta property="rainbow" label="Rainbow Mode" type="boolean" default="0"/>
 </head>
 
 <body style="margin: 0; padding: 0;">
-    <canvas id="canvas" width="320" height="200"></canvas>
+  <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-    // Canvas consts
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
+  // Canvas consts
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
 
-    // Various consts
-    const SPEED_MS_VALUES = [7500, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 750, 500];
-    const MAX_COLOR_STOPS = 12;
+  // Various consts
+  const SPEED_MS_VALUES = [7500, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 750, 500];
+  const MAX_COLOR_STOPS = 12;
 
-    // Sizing consts
-    const TOTAL_SOLID_COLOR_WIDTH = canvasWidth * (5 / 32); // 50
-    const TOTAL_FAN_WIDTH = canvasWidth * (5 / 32); // 50
-    const TOTAL_STRIP_WIDTH = canvasWidth - TOTAL_SOLID_COLOR_WIDTH - TOTAL_FAN_WIDTH; // 220
+  // Sizing consts
+  const TOTAL_SOLID_COLOR_WIDTH = canvasWidth * (5 / 32); // 50
+  const TOTAL_FAN_WIDTH = canvasWidth * (5 / 32); // 50
+  const TOTAL_STRIP_WIDTH = canvasWidth - TOTAL_SOLID_COLOR_WIDTH - TOTAL_FAN_WIDTH; // 220
 
-    // Lifecycle vars
-    let globalProgress = null; // [0, 1)
-    let currentLoopStartTime = null;
-    let millisecondsPerLoop = null;
+  // Lifecycle vars
+  let globalProgress = null; // [0, 1)
+  let currentLoopStartTime = null;
+  let millisecondsPerLoop = null;
 
-    // Effects
-    let solidColors = [];
-    let strips = [];
-    let fans = [];
+  // Effects
+  let solidColors = [];
+  let strips = [];
+  let fans = [];
 
-    //#region Effect Classes
-    class SolidColor {
-        constructor(x, y, width, height, isBreathing, useFirstColor) {
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
-            this.isBreathing = isBreathing;
-            this.useFirstColor = useFirstColor;
-            this.opacity = 1;
-        }
-
-        // As progress goes 0 -> 0.5 -> 1 opacity goes 1 -> 0 -> 1
-        update(progress) {
-            this.opacity = this.isBreathing ? Math.abs(1 - 2 * progress) : 1;
-        }
-
-        draw(isRainbow) {
-            ctx.save();
-
-            ctx.translate(this.x, this.y);
-
-            ctx.fillStyle = isRainbow ? this.getRainbowFillStyle() : (this.useFirstColor ? color1 : color2);
-            ctx.globalAlpha = this.opacity;
-            ctx.fillRect(0, 0, this.width, this.height);
-
-            ctx.restore();
-        }
-
-        getRainbowFillStyle() {
-            const gradient = ctx.createLinearGradient(0, 0,
-            this.useFirstColor ? 0 : this.width,
-            this.useFirstColor ? this.height : 0
-            );
-
-            for (let i = 0; i < MAX_COLOR_STOPS; i++) {
-                const hue = (360 / MAX_COLOR_STOPS) * i;
-                gradient.addColorStop(i / MAX_COLOR_STOPS, `hsl(${hue}, 100%, 50%)`);
-            }
-
-            return gradient;
-        }
+  //#region Effect Classes
+  class SolidColor {
+    constructor(x, y, width, height, isBreathing, useFirstColor) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+      this.isBreathing = isBreathing;
+      this.useFirstColor = useFirstColor;
+      this.opacity = 1;
     }
 
-    class Strip {
-        constructor(x, y, width, height, gradientType, useFirstColor) {
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
-            this.gradientType = gradientType;
-            this.useFirstColor = useFirstColor;
-        }
-
-        update(progress) {
-            this.y = progress * (canvasHeight + stripGap);
-        }
-
-        draw(isRainbow) {
-            ctx.save();
-
-            ctx.translate(this.x, this.y);
-
-            const gradient = isRainbow ? this.getRainbowGradient() : this.getColorGradient();
-            this.drawSingleStrip(gradient, 0, 0);
-            this.drawSingleStrip(gradient, 0, 0 - this.height - stripGap);
-
-            ctx.restore();
-        }
-
-        // Translates context to given position and then draws a strip with the given style
-        drawSingleStrip(fillStyle, translateX, translateY) {
-            ctx.translate(translateX, translateY);
-            ctx.fillStyle = fillStyle;
-            ctx.fillRect(0, 0, this.width, this.height);
-        }
-
-        getColorGradient() {
-            const color = this.useFirstColor ? color1 : color2;
-            return Strip.GRADIENT_FUNCTION_MAP[this.gradientType](color, backgroundColor, 0, 0, 0, this.height);
-        }
-
-        getRainbowGradient() {
-            const maxOpacityIndex = MAX_COLOR_STOPS / 2;
-            const opacityCalculations = {
-                0: (i) => (i <= maxOpacityIndex ? i : MAX_COLOR_STOPS - i) / maxOpacityIndex, // Soft
-                1: (i) => i / MAX_COLOR_STOPS, // HardEdgeFirst
-                2: (i) => (MAX_COLOR_STOPS - i) / MAX_COLOR_STOPS, // HardEdgeLast
-            };
-
-            const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
-            
-            for (let i = 0; i < MAX_COLOR_STOPS; i++) {
-                const hue = (360 / MAX_COLOR_STOPS) * i + (this.useFirstColor ? 180 : 0);
-                const opacity = opacityCalculations[this.gradientType](i);
-                gradient.addColorStop(i / MAX_COLOR_STOPS, `hsla(${hue}, 100%, 50%, ${opacity})`);
-            }
-
-            return gradient;
-        }
-
-        static getSoftGradient(mainColor, fadeColor, x0, y0, x1, y1) {
-            const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
-            gradient.addColorStop(0, fadeColor);
-            gradient.addColorStop(0.5, mainColor);
-            gradient.addColorStop(1, fadeColor);
-            return gradient;
-        }
-
-        static getHardEdgeFirstGradient(mainColor, fadeColor, x0, y0, x1, y1) {
-            const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
-            gradient.addColorStop(0, fadeColor);
-            gradient.addColorStop(1, mainColor);
-            return gradient;
-        }
-
-        static getHardEdgeLastGradient(mainColor, fadeColor, x0, y0, x1, y1) {
-            const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
-            gradient.addColorStop(0, mainColor);
-            gradient.addColorStop(1, fadeColor);
-            return gradient;
-        }
-    }
-    // Can't declare as static inside class for some reason...
-    Strip.GRADIENT_FUNCTION_MAP = {
-        0: Strip.getSoftGradient,
-        1: Strip.getHardEdgeFirstGradient,
-        2: Strip.getHardEdgeLastGradient
-    };
-    Strip.NUM_GRADIENT_TYPES = Object.keys(Strip.GRADIENT_FUNCTION_MAP).length;
-
-    class Fan {
-        constructor(x, y, radius, clockwise, useFirstColor) {
-            this.x = x;
-            this.y = y;
-            this.radius = radius;
-            this.clockwise = clockwise;
-            this.useFirstColor = useFirstColor;
-            this.angle = 0;
-        }
-
-        update(progress) {
-            this.angle = (progress * Fan.FULL_CIRCLE_RADIANS);
-        }
-
-        draw(isRainbow) {
-            ctx.save();
-
-            ctx.translate(this.x, this.y);
-
-            const clipArea = new Path2D();
-            clipArea.rect(-this.radius, - this.radius, this.radius * 2, this.radius * 2);
-            ctx.clip(clipArea);
-
-            const rotationDirection = this.clockwise ? 1 : -1;
-            ctx.rotate(this.angle * rotationDirection);
-
-            this.drawOuterCircle(isRainbow);
-            this.drawInnerCircle();
-
-            ctx.restore();
-        }
-
-        drawOuterCircle(isRainbow) {
-            isRainbow ? this.drawRainbowCircle() : this.drawColorCircle();
-        }
-
-        drawRainbowCircle() {
-            // No createConicGradient available :(
-            const sectionCount = 90; // Good balance between looks and performance
-            const sectionAngleSize = Fan.FULL_CIRCLE_RADIANS / sectionCount;
-
-            for (let i = 0; i < sectionCount; i++) {
-                const start = sectionAngleSize * i;
-                const end = (sectionAngleSize * (i+2));
-                const hue = (360 / sectionCount) * i;
-
-                ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-                ctx.beginPath();
-                ctx.arc(0, 0, this.radius * 2, start, end);
-                ctx.lineTo(0, 0);
-                ctx.closePath();
-                ctx.fill();
-            }
-        }
-        
-        drawColorCircle() {
-            ctx.fillStyle = this.getColorFillStyle();
-            ctx.beginPath();
-            ctx.arc(0, 0, this.radius * 2, 0, Fan.FULL_CIRCLE_RADIANS);
-            ctx.closePath();
-            ctx.fill();
-        }
-
-        getColorFillStyle() {
-            const firstColor = this.useFirstColor ? color1 : color2;
-            let secondColor;
-            if (fanIncludeOtherColor) {
-                secondColor = this.useFirstColor ? color2 : color1;
-            } else {
-                secondColor = backgroundColor;
-            }
-            const gradient = ctx.createLinearGradient(0 - this.radius, 0, 0 + this.radius, 0);
-            gradient.addColorStop(0, firstColor);
-            gradient.addColorStop(0.5, backgroundColor);
-            gradient.addColorStop(1, secondColor);
-            return gradient;
-        }
-
-        drawInnerCircle() {
-            let fillStyle;
-            switch (innerFanColor) {
-                case 'Other Color':
-                    fillStyle = this.useFirstColor ? color2 : color1;
-                    break;
-                case 'Same Color':
-                    fillStyle = this.useFirstColor ? color1 : color2;
-                    break;
-                case 'Background Color':
-                    fillStyle = backgroundColor;
-                    break;
-                default:
-                    console.error(`Inner Fan Color "${innerFanColor}" implementation not found.`);
-            }
-
-            ctx.fillStyle = fillStyle;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.radius * (fanInnerPercentCovered / 100), 0, Fan.FULL_CIRCLE_RADIANS);
-            ctx.closePath();
-            ctx.fill();
-        }
-    }
-    // Can't declare as static inside class for some reason...
-    Fan.FULL_CIRCLE_RADIANS = 2 * Math.PI;
-    //#endregion Effect Classes
-
-    //#region inits
-    function initEffects() {
-        initSolidColors();
-        initStrips();
-        initFans();
+    // As progress goes 0 -> 0.5 -> 1 opacity goes 1 -> 0 -> 1
+    update(progress) {
+      this.opacity = this.isBreathing ? Math.abs(1 - 2 * progress) : 1;
     }
 
-    function initSolidColors() {
-        const width = TOTAL_SOLID_COLOR_WIDTH;
-        const height = canvasHeight / 4;
-        const startX = 0;
+    draw(isRainbow) {
+      ctx.save();
 
-        solidColors = [];
-        solidColors.push(new SolidColor(startX, 0,          width, height, false, true));
-        solidColors.push(new SolidColor(startX, height,     width, height, false, false));
-        solidColors.push(new SolidColor(startX, height * 2, width, height, true,  true));
-        solidColors.push(new SolidColor(startX, height * 3, width, height, true,  false));
+      ctx.translate(this.x, this.y);
+
+      ctx.fillStyle = isRainbow ? this.getRainbowFillStyle() : (this.useFirstColor ? color1 : color2);
+      ctx.globalAlpha = this.opacity;
+      ctx.fillRect(0, 0, this.width, this.height);
+
+      ctx.restore();
     }
 
-    function initStrips() {
-        const stripCount = Strip.NUM_GRADIENT_TYPES * 2;
-        const width = TOTAL_STRIP_WIDTH / stripCount;
-        const startX = TOTAL_SOLID_COLOR_WIDTH;
+    getRainbowFillStyle() {
+      const gradient = ctx.createLinearGradient(0, 0,
+        this.useFirstColor ? 0 : this.width,
+        this.useFirstColor ? this.height : 0
+      );
 
-        strips = [];
-        for (let i = 0; i < stripCount; i++) {
-            strips.push(new Strip(startX + i * width, 0, width, canvasHeight, i % Strip.NUM_GRADIENT_TYPES, i < stripCount / 2));
-        }
+      for (let i = 0; i < MAX_COLOR_STOPS; i++) {
+        const hue = (360 / MAX_COLOR_STOPS) * i;
+        gradient.addColorStop(i / MAX_COLOR_STOPS, `hsl(${hue}, 100%, 50%)`);
+      }
+
+      return gradient;
+    }
+  }
+
+  class Strip {
+    constructor(x, y, width, height, gradientType, useFirstColor) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+      this.gradientType = gradientType;
+      this.useFirstColor = useFirstColor;
     }
 
-    function initFans() {
-        const radius = TOTAL_FAN_WIDTH / 2;
-        const startX = canvasWidth - radius;
-
-        fans = [];
-        fans.push(new Fan(startX, radius,     radius, true,  true));
-        fans.push(new Fan(startX, radius * 3, radius, false, true));
-        fans.push(new Fan(startX, radius * 5, radius, true,  false));
-        fans.push(new Fan(startX, radius * 7, radius, false, false));
-    }
-    //#endregion inits
-
-    //#region SignalRGB Callbacks
-    function onspeedChanged() {
-        millisecondsPerLoop = SPEED_MS_VALUES[speed - 1];
-    }
-    //#endregion SignalRGB Callbacks
-
-    function update() {
-        // Lifecycle updates
-        const now = performance.now();
-        if (now - currentLoopStartTime > millisecondsPerLoop) {
-            currentLoopStartTime = now;
-        }
-        globalProgress = (now - currentLoopStartTime) / millisecondsPerLoop;
-
-        // Background update
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        // Effect updates
-        solidColors.forEach(solidColor => {
-            solidColor.update(globalProgress);
-            solidColor.draw(rainbow);
-        });
-        strips.forEach(strip => {
-            strip.update(globalProgress);
-            strip.draw(rainbow);
-        });
-        fans.forEach(fan => {
-            fan.update(globalProgress);
-            fan.draw(rainbow);
-        });
-
-        window.requestAnimationFrame(update);
+    update(progress) {
+      this.y = progress * (canvasHeight + stripGap);
     }
 
-    function onEngineReady() {
-        initEffects();
-        onspeedChanged();
-        currentLoopStartTime = performance.now();
-        window.requestAnimationFrame(update);
+    draw(isRainbow) {
+      ctx.save();
+
+      ctx.translate(this.x, this.y);
+
+      const gradient = isRainbow ? this.getRainbowGradient() : this.getColorGradient();
+      this.drawSingleStrip(gradient, 0, 0);
+      this.drawSingleStrip(gradient, 0, 0 - this.height - stripGap);
+
+      ctx.restore();
     }
 
-    window.requestAnimationFrame(onEngineReady);
+    // Translates context to given position and then draws a strip with the given style
+    drawSingleStrip(fillStyle, translateX, translateY) {
+      ctx.translate(translateX, translateY);
+      ctx.fillStyle = fillStyle;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    getColorGradient() {
+      const color = this.useFirstColor ? color1 : color2;
+      return Strip.GRADIENT_FUNCTION_MAP[this.gradientType](color, backgroundColor, 0, 0, 0, this.height);
+    }
+
+    getRainbowGradient() {
+      const maxOpacityIndex = MAX_COLOR_STOPS / 2;
+      const opacityCalculations = {
+        0: (i) => (i <= maxOpacityIndex ? i : MAX_COLOR_STOPS - i) / maxOpacityIndex, // Soft
+        1: (i) => i / MAX_COLOR_STOPS, // HardEdgeFirst
+        2: (i) => (MAX_COLOR_STOPS - i) / MAX_COLOR_STOPS, // HardEdgeLast
+      };
+
+      const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
+
+      for (let i = 0; i < MAX_COLOR_STOPS; i++) {
+        const hue = (360 / MAX_COLOR_STOPS) * i + (this.useFirstColor ? 180 : 0);
+        const opacity = opacityCalculations[this.gradientType](i);
+        gradient.addColorStop(i / MAX_COLOR_STOPS, `hsla(${hue}, 100%, 50%, ${opacity})`);
+      }
+
+      return gradient;
+    }
+
+    static getSoftGradient(mainColor, fadeColor, x0, y0, x1, y1) {
+      const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+      gradient.addColorStop(0, fadeColor);
+      gradient.addColorStop(0.5, mainColor);
+      gradient.addColorStop(1, fadeColor);
+      return gradient;
+    }
+
+    static getHardEdgeFirstGradient(mainColor, fadeColor, x0, y0, x1, y1) {
+      const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+      gradient.addColorStop(0, fadeColor);
+      gradient.addColorStop(1, mainColor);
+      return gradient;
+    }
+
+    static getHardEdgeLastGradient(mainColor, fadeColor, x0, y0, x1, y1) {
+      const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+      gradient.addColorStop(0, mainColor);
+      gradient.addColorStop(1, fadeColor);
+      return gradient;
+    }
+  }
+  // Can't declare as static inside class for some reason...
+  Strip.GRADIENT_FUNCTION_MAP = {
+    0: Strip.getSoftGradient,
+    1: Strip.getHardEdgeFirstGradient,
+    2: Strip.getHardEdgeLastGradient
+  };
+  Strip.NUM_GRADIENT_TYPES = Object.keys(Strip.GRADIENT_FUNCTION_MAP).length;
+
+  class Fan {
+    constructor(x, y, radius, clockwise, useFirstColor) {
+      this.x = x;
+      this.y = y;
+      this.radius = radius;
+      this.clockwise = clockwise;
+      this.useFirstColor = useFirstColor;
+      this.angle = 0;
+    }
+
+    update(progress) {
+      this.angle = (progress * Fan.FULL_CIRCLE_RADIANS);
+    }
+
+    draw(isRainbow) {
+      ctx.save();
+
+      ctx.translate(this.x, this.y);
+
+      const clipArea = new Path2D();
+      clipArea.rect(-this.radius, - this.radius, this.radius * 2, this.radius * 2);
+      ctx.clip(clipArea);
+
+      const rotationDirection = this.clockwise ? 1 : -1;
+      ctx.rotate(this.angle * rotationDirection);
+
+      this.drawOuterCircle(isRainbow);
+      this.drawInnerCircle();
+
+      ctx.restore();
+    }
+
+    drawOuterCircle(isRainbow) {
+      isRainbow ? this.drawRainbowCircle() : this.drawColorCircle();
+    }
+
+    drawRainbowCircle() {
+      // No createConicGradient available :(
+      const sectionCount = 90; // Good balance between looks and performance
+      const sectionAngleSize = Fan.FULL_CIRCLE_RADIANS / sectionCount;
+
+      for (let i = 0; i < sectionCount; i++) {
+        const start = sectionAngleSize * i;
+        const end = (sectionAngleSize * (i + 2));
+        const hue = (360 / sectionCount) * i;
+
+        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 2, start, end);
+        ctx.lineTo(0, 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    drawColorCircle() {
+      ctx.fillStyle = this.getColorFillStyle();
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 2, 0, Fan.FULL_CIRCLE_RADIANS);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    getColorFillStyle() {
+      const firstColor = this.useFirstColor ? color1 : color2;
+      let secondColor;
+      if (fanIncludeOtherColor) {
+        secondColor = this.useFirstColor ? color2 : color1;
+      } else {
+        secondColor = backgroundColor;
+      }
+      const gradient = ctx.createLinearGradient(0 - this.radius, 0, 0 + this.radius, 0);
+      gradient.addColorStop(0, firstColor);
+      gradient.addColorStop(0.5, backgroundColor);
+      gradient.addColorStop(1, secondColor);
+      return gradient;
+    }
+
+    drawInnerCircle() {
+      let fillStyle;
+      switch (innerFanColor) {
+        case 'Other Color':
+          fillStyle = this.useFirstColor ? color2 : color1;
+          break;
+        case 'Same Color':
+          fillStyle = this.useFirstColor ? color1 : color2;
+          break;
+        case 'Background Color':
+          fillStyle = backgroundColor;
+          break;
+        default:
+          console.error(`Inner Fan Color "${innerFanColor}" implementation not found.`);
+      }
+
+      ctx.fillStyle = fillStyle;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * (fanInnerPercentCovered / 100), 0, Fan.FULL_CIRCLE_RADIANS);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  // Can't declare as static inside class for some reason...
+  Fan.FULL_CIRCLE_RADIANS = 2 * Math.PI;
+  //#endregion Effect Classes
+
+  //#region inits
+  function initEffects() {
+    initSolidColors();
+    initStrips();
+    initFans();
+  }
+
+  function initSolidColors() {
+    const width = TOTAL_SOLID_COLOR_WIDTH;
+    const height = canvasHeight / 4;
+    const startX = 0;
+
+    solidColors = [];
+    solidColors.push(new SolidColor(startX, 0,          width, height, false, true));
+    solidColors.push(new SolidColor(startX, height,     width, height, false, false));
+    solidColors.push(new SolidColor(startX, height * 2, width, height, true,  true));
+    solidColors.push(new SolidColor(startX, height * 3, width, height, true,  false));
+  }
+
+  function initStrips() {
+    const stripCount = Strip.NUM_GRADIENT_TYPES * 2;
+    const width = TOTAL_STRIP_WIDTH / stripCount;
+    const startX = TOTAL_SOLID_COLOR_WIDTH;
+
+    strips = [];
+    for (let i = 0; i < stripCount; i++) {
+      strips.push(new Strip(startX + i * width, 0, width, canvasHeight, i % Strip.NUM_GRADIENT_TYPES, i < stripCount / 2));
+    }
+  }
+
+  function initFans() {
+    const radius = TOTAL_FAN_WIDTH / 2;
+    const startX = canvasWidth - radius;
+
+    fans = [];
+    fans.push(new Fan(startX, radius,     radius, true,  true));
+    fans.push(new Fan(startX, radius * 3, radius, false, true));
+    fans.push(new Fan(startX, radius * 5, radius, true,  false));
+    fans.push(new Fan(startX, radius * 7, radius, false, false));
+  }
+  //#endregion inits
+
+  //#region SignalRGB Callbacks
+  function onspeedChanged() {
+    millisecondsPerLoop = SPEED_MS_VALUES[speed - 1];
+  }
+  //#endregion SignalRGB Callbacks
+
+  function update() {
+    // Lifecycle updates
+    const now = performance.now();
+    if (now - currentLoopStartTime > millisecondsPerLoop) {
+      currentLoopStartTime = now;
+    }
+    globalProgress = (now - currentLoopStartTime) / millisecondsPerLoop;
+
+    // Background update
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Effect updates
+    solidColors.forEach(solidColor => {
+      solidColor.update(globalProgress);
+      solidColor.draw(rainbow);
+    });
+    strips.forEach(strip => {
+      strip.update(globalProgress);
+      strip.draw(rainbow);
+    });
+    fans.forEach(fan => {
+      fan.update(globalProgress);
+      fan.draw(rainbow);
+    });
+
+    window.requestAnimationFrame(update);
+  }
+
+  function onEngineReady() {
+    initEffects();
+    onspeedChanged();
+    currentLoopStartTime = performance.now();
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(onEngineReady);
 </script>

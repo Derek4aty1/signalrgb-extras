@@ -3,11 +3,15 @@
   <meta description="Black Hole effect from WLED recreated in SignalRGB."/>
   <meta publisher="Derek Huber"/>
   <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
-  <meta property="colorMode" label="Color Mode" type="combobox" values="Vertical Rainbow,Horizontal Rainbow,Outer + Inner Colors" default="Vertical Rainbow"/>
+  <meta property="colorMode" label="Color Mode" type="combobox"
+        values="Vertical Rainbow,Horizontal Rainbow,Outer + Inner Colors"
+        default="Vertical Rainbow"/>
   <meta property="rainbowCycleSpeed" label="Rainbow Cycle Speed" type="number" min="0" max="100" default="50"/>
   <meta property="outerColor" label="Outer Color" type="color" min="0" max="360" default="#0000ff"/>
   <meta property="innerColor" label="Inner Color" type="color" min="0" max="360" default="#8000ff"/>
-  <meta property="drawOrder" label="Draw Order" type="combobox" values="By Age (Mixed),Outer Ring On Top,Inner Ring On Top" default="Inner Ring On Top"/>
+  <meta property="drawOrder" label="Draw Order" type="combobox"
+        values="By Age (Mixed),Outer Ring On Top,Inner Ring On Top"
+        default="Inner Ring On Top"/>
   <meta property="centerColor" label="Center Color" type="color" min="0" max="360" default="#ffffff"/>
   <meta property="drawCenter" label="Draw Center" type="boolean" default="1"/>
   <meta property="pixelSize" label="Pixel Size" type="number" min="1" max="20" default="20"/>
@@ -94,7 +98,7 @@
 
   function getPixelFillStyle(x, y, pixelType) {
     let fillStyle;
-    switch(colorMode) {
+    switch (colorMode) {
       case 'Vertical Rainbow':
         fillStyle = `hsl(${(x / canvasWidth) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
         break;
@@ -133,7 +137,7 @@
   }
 
   function sin8(x) {
-   return (Math.sin((x/128.0) * Math.PI) * 128) + 128;
+    return (Math.sin((x / 128.0) * Math.PI) * 128) + 128;
   }
 
   function scale8(i, sc) {
@@ -164,15 +168,15 @@
     // Pixels
     pixels = pixels.filter(pixel => {
       if (pixel.opacity > 0) {
-          pixel.update();
-          return true;
+        pixel.update();
+        return true;
       }
       return false;
     });
 
     addNewBlackHolePixels(pixels);
 
-    switch(drawOrder) {
+    switch (drawOrder) {
       case DrawOrder.ByAge:
         pixels.forEach(pixel => pixel.draw());
         break;

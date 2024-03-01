@@ -8,18 +8,19 @@
   <meta property="reverse" label="Reverse" type="boolean" default="0"/>
   <meta property="mirror" label="Mirror" type="boolean" default="0"/>
 </head>
+
 <body style="margin: 0; padding: 0">
   <canvas id="canvas" width="320" height="200"></canvas>
 </body>
 
 <script>
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
-  
+
   const FULL_CIRCLE_RADIANS = 2 * Math.PI;
-  const MAX_HUE= 360;
+  const MAX_HUE = 360;
   const SPIRAL_GRANULARITY = 100;
 
   let angle = 0;

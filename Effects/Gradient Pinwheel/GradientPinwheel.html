@@ -1,4 +1,3 @@
-
 <head>
   <title>Gradient Pinwheel</title>
   <meta description="Gradient Pinwheel effect with smooth transitions between the colors instead of hard edges."/>
@@ -21,14 +20,14 @@
 </body>
 
 <script>
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
 
   const DEGREES_IN_CIRCLE = 360;
   const RADIAN_CONVERSION = Math.PI / 180;
-  
+
   let rotation = 0;
   let prevTime = performance.now();
 
@@ -84,7 +83,7 @@
 
     return interpolatedColor;
   }
-  
+
   function update() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);

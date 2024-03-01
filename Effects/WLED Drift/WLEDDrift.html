@@ -3,7 +3,9 @@
   <meta description="Drift effect from WLED recreated in SignalRGB."/>
   <meta publisher="Derek Huber"/>
   <meta property="backgroundColor" label="Background Color" type="color" min="0" max="360" default="#000000"/>
-  <meta property="colorMode" label="Color Mode" type="combobox" values="Vertical Rainbow,Horizontal Rainbow,Color Cycle,Custom Color" default="Vertical Rainbow"/>
+  <meta property="colorMode" label="Color Mode" type="combobox"
+        values="Vertical Rainbow,Horizontal Rainbow,Color Cycle,Custom Color"
+        default="Vertical Rainbow"/>
   <meta property="colorCycleSpeed" label="Rainbow / Color Cycle Speed" type="number" min="0" max="100" default="50"/>
   <meta property="customColor" label="Custom Color" type="color" min="0" max="360" default="#0000ff"/>
   <meta property="pixelSize" label="Pixel Size" type="number" min="1" max="20" default="20"/>
@@ -69,7 +71,7 @@
 
   function getPixelFillStyle(x, y) {
     let fillStyle;
-    switch(colorMode) {
+    switch (colorMode) {
       case 'Vertical Rainbow':
         fillStyle = `hsl(${(x / canvasWidth) * MAX_HUE + colorCycleHue}, 100%, 50%)`;
         break;
@@ -117,9 +119,9 @@
 
     pixels = pixels.filter(pixel => {
       if (pixel.opacity > 0) {
-          pixel.update();
-          pixel.draw();
-          return true;
+        pixel.update();
+        pixel.draw();
+        return true;
       }
       return false;
     });
