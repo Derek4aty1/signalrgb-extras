@@ -13,7 +13,7 @@
   <meta property="outerLinks" label="Outer Links" type="boolean" default="1"/>
   <meta property="innerLinks" label="Inner Links" type="boolean" default="1"/>
   <meta property="linkSize" label="Link Size" type="number" min="1" max="10" default="3"/>
-  <meta property="direction" label="Swap Direction" type="boolean" default="0"/>
+  <meta property="reverse" label="Reverse Direction" type="boolean" default="0"/>
 </head>
 
 <body style="margin: 0; padding: 0;">
@@ -42,21 +42,11 @@
     this.radius;
 
     this.updatePosition = function () {
-      let pointTime;
-      if (direction)
-        pointTime = time - ((1 / (horizontalSpread + 4)) * this.linkNum * Math.PI); // Rotational difference between each link
-      else
-        pointTime = time + ((1 / (horizontalSpread + 4)) * this.linkNum * Math.PI);
+      const offset = ((1 / (horizontalSpread + 4)) * this.linkNum * Math.PI); // Rotational difference between each link
+      const pointTime = time + ((reverse ? -1 : 1) * offset);
 
-
-      if (this.isHelixOne) {
-        this.yPos = 100 + Math.sin(pointTime) * verticalSpread;
-        this.radius = 10 + Math.cos(pointTime) * 5;
-      }
-      else {
-        this.yPos = 100 + Math.sin(pointTime + Math.PI) * verticalSpread;
-        this.radius = 10 + Math.cos(pointTime + Math.PI) * 5;
-      }
+      this.yPos = 100 + Math.sin(pointTime + (this.isHelixOne ? 0 : Math.PI)) * verticalSpread;
+      this.radius = 10 + Math.cos(pointTime + (this.isHelixOne ? 0 : Math.PI)) * 5;
     };
 
     this.draw = function () {
@@ -64,7 +54,7 @@
 
       // Being verbose here for readability
       if (colorCycleEnabled && rainbow) {
-        currentHue = direction ? this.rainbowHue - colorCycleHue : this.rainbowHue + colorCycleHue;
+        currentHue = this.rainbowHue + (reverse ? -1 : 1) * colorCycleHue;
       } else if (colorCycleEnabled && !rainbow) {
         currentHue = colorCycleHue;
       } else if (!colorCycleEnabled && rainbow) {
@@ -79,6 +69,7 @@
 
       ctx.beginPath();
       ctx.arc(this.xPos, this.yPos, this.radius, 0, FULL_CIRCLE_RADIANS);
+      ctx.closePath();
       ctx.fill();
     };
   }
@@ -105,7 +96,7 @@
 
         // Being verbose here for readability
         if (colorCycleEnabled && rainbow) { 
-          currentHue = direction ? helixPoints[i * 2].rainbowHue - colorCycleHue : helixPoints[i * 2].rainbowHue + colorCycleHue;
+          currentHue = helixPoints[i * 2].rainbowHue + (reverse ? -1 : 1) * colorCycleHue;
         } else if (colorCycleEnabled && !rainbow) {
           currentHue = colorCycleHue;
         } else if (!colorCycleEnabled && rainbow) {
@@ -131,7 +122,7 @@
 
         // Being verbose here for readability
         if (colorCycleEnabled && rainbow) {
-          currentHue = direction ? helixPoints[i + 2].rainbowHue - colorCycleHue : helixPoints[i].rainbowHue + colorCycleHue;
+          currentHue = helixPoints[i + 2].rainbowHue + (reverse ? -1 : 1) * colorCycleHue;
         } else if (colorCycleEnabled && !rainbow) {
           currentHue = colorCycleHue;
         } else if (!colorCycleEnabled && rainbow) {

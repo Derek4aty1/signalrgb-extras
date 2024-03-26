@@ -117,5 +117,13 @@
     window.requestAnimationFrame(update);
   }
 
-  window.requestAnimationFrame(update);
+  function onEngineReady() {
+    const hslBackgroundColor = hexToHSL(backgroundColor);
+    ctx.fillStyle = `hsl(${hslBackgroundColor.h + backgroundColorCycleHue}, ${hslBackgroundColor.s}%, ${hslBackgroundColor.l}%)`;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(onEngineReady);
 </script>
