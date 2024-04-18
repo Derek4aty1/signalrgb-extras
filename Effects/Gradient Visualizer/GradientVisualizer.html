@@ -1,0 +1,132 @@
+<head>
+  <title>Gradient Visualizer</title>
+  <meta description="Gradient audio-visualizer based off the minimal gradient mode in Bars Visualizer from SignalRGB."/>
+  <meta publisher="Derek Huber"/>
+
+  <!-- Behavior settings -->
+  <meta property="centered" label="Centered" type="boolean" default="0"/>
+  <meta property="verticalMovement" label="Vertical Movement" type="boolean" default="1"/>
+  <meta property="verticalGradient" label="Vertical Gradient" type="boolean" default="1"/>
+  <meta property="secondsUntilIdle" label="Seconds Until Idle" tooltip="After audio stops" type="number" min="1" max="10" default="5"/>
+  <meta property="soundSensitivity" label="Sound sensitivity" type="number" min="0" max="50" default="35"/>
+  <meta property="fadeRate" label="Fade Rate" type="number" min="1" max="10" default="5"/>
+  <meta property="barWidth" label="Bar Width" type="number" min="1" max="20" default="10"/>
+
+  <!-- Color settings -->
+  <meta property="backgroundColor" label="Background color" type="color" min="0" max="360" default="#000000"/>
+  <meta property="numColors" label="Number Of Colors" type="number" min="1" max="6" default="6"/>
+  <meta property="color1" label="Color 1" type="color" min="0" max="360" default="#ff0000"/>
+  <meta property="color2" label="Color 2" type="color" min="0" max="360" default="#ffff00"/>
+  <meta property="color3" label="Color 3" type="color" min="0" max="360" default="#00ff00"/>
+  <meta property="color4" label="Color 4" type="color" min="0" max="360" default="#00ffff"/>
+  <meta property="color5" label="Color 5" type="color" min="0" max="360" default="#0000ff"/>
+  <meta property="color6" label="Color 6" type="color" min="0" max="360" default="#ff00ff"/>
+</head>
+
+<body style="margin: 0; padding: 0; background: #000000">
+  <canvas id="canvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
+
+  const FADE_VALUES = [0.025, 0.033, 0.05, 0.075, 0.1, 0.2, 0.3, 0.4, 0.5, 1];
+
+  // Start as idle
+  let pauseTime = -Infinity; // Since performance.now() starts at 0 and we compare against it
+  let isIdle = true;
+
+  function checkIdle(freqs) {
+    const currentTime = performance.now();
+    const audioPlaying = freqs.some(freq => freq > 0);
+
+    // Playing
+    if (audioPlaying) {
+      pauseTime = null;
+      return false;
+    }
+
+    // Just paused
+    if (!audioPlaying && pauseTime === null) {
+      pauseTime = currentTime;
+      return false;
+    }
+
+    // Has it been 1-10 seconds since the last pause?
+    if (pauseTime !== null && currentTime - pauseTime > 1000 * secondsUntilIdle) {
+      return true;
+    } else { // Nope, keep waiting!
+      return false;
+    }
+  }
+
+  function getFillStyle(colors) {
+    if (numColors === 1) {
+      return colors[0];
+    }
+
+    const gradient = verticalGradient ?
+      ctx.createLinearGradient(0, canvasHeight, 0, 0) : // Bottom to top
+      ctx.createLinearGradient(0, 0, canvasWidth, 0); // Left to right
+
+    if (centered) {
+      const colorStopOffset = (0.5 / (numColors - 1));
+      for (let i = 0; i < numColors; i++) {
+        gradient.addColorStop(0.5 + i * colorStopOffset, colors[i]);
+        gradient.addColorStop(0.5 - i * colorStopOffset, colors[i]);
+      }
+    } else {
+      const colorStopOffset = (1 / (numColors - 1));
+      for (let i = 0; i < numColors; i++) {
+        gradient.addColorStop(i * colorStopOffset, colors[i]);
+      }
+    }
+
+    return gradient;
+  }
+
+  function update() {
+    ctx.globalAlpha = FADE_VALUES[fadeRate - 1];
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    ctx.globalAlpha = 1;
+
+    const colors = [color1, color2, color3, color4, color5, color6];
+    const freqs = new Uint8Array(engine.audio.freq);
+
+    // Spans entire canvas
+    ctx.fillStyle = getFillStyle(colors);
+
+    // Check if audio has stopped playing for 1-10 seconds (user-defined secondsUtilIdle)
+    isIdle = checkIdle(freqs);
+
+    for (let i = 0; i < freqs.length; i++) {
+      // Skip frequencies below threshold when audio is playing
+      if (!isIdle && !(freqs[i] > 50 - soundSensitivity)) {
+        continue;
+      }
+
+      // Being verbose here for readability
+      if (verticalMovement && centered) {
+        ctx.fillRect(0, centerY - i, canvasWidth, barWidth);
+        ctx.fillRect(0, centerY + i - barWidth, canvasWidth, barWidth);
+      } else if (verticalMovement && !centered) {
+        ctx.fillRect(0, canvasHeight - i * 2, canvasWidth, barWidth);
+      } else if (!verticalMovement && centered) {
+        ctx.fillRect(centerX - i * 2, 0, barWidth, canvasHeight);
+        ctx.fillRect(centerX + i * 2 - barWidth, 0, barWidth, canvasHeight);
+      } else if (!verticalMovement && !centered) {
+        ctx.fillRect(i * 4 - barWidth, 0, barWidth, canvasHeight);
+      }
+    }
+
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(update);
+</script>
