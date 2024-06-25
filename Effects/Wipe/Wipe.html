@@ -1,0 +1,353 @@
+<head>
+  <title>Wipe</title>
+  <meta description="Colors wipe over each other.  For layout setup, the squares on the sides are 50x50 pixels.  Each strip in the center is ~73 pixels wide.">
+  <meta publisher="Derek Huber"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="10" default="5">
+  <meta property="softTransition" label="Soft Transition" type="boolean" default="0">
+  <meta property="colorCount" label="Number Of Colors" type="number" min="2" max="7" default="7"/>
+  <meta property="color1" label="Color 1" type="color" min="0" max="360" default="#ff0000"/>
+  <meta property="color2" label="Color 2" type="color" min="0" max="360" default="#ff8000"/>
+  <meta property="color3" label="Color 3" type="color" min="0" max="360" default="#ffff00"/>
+  <meta property="color4" label="Color 4" type="color" min="0" max="360" default="#00ff00"/>
+  <meta property="color5" label="Color 5" type="color" min="0" max="360" default="#0000ff"/>
+  <meta property="color6" label="Color 6" type="color" min="0" max="360" default="#8000ff"/>
+  <meta property="color7" label="Color 7" type="color" min="0" max="360" default="#ff0080"/>
+  <meta property="innerFanSize" label="Inner Fan Size (%)" type="number" min="0" max="100" default="0"/>
+  <meta property="innerFanColorType" label="Inner Fan Color Type" type="combobox" values="Previous Color,Current Color,Custom Fan Color" default="Custom Fan Color"/>
+  <meta property="customFanColor" label="Custom Fan Color" type="color" min="0" max="360" default="#000000"/>
+  <meta property="pulseShape" label="Pulse Shape" type="combobox" values="Circle,Square" default="Circle"/>
+</head>
+
+<body style="margin: 0; padding: 0; background-color: #000000;">
+  <canvas id="canvas" width="320" height="200"></canvas>
+</body>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  /** @type {CanvasRenderingContext2D} */
+  const ctx = canvas.getContext('2d');
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  // Various consts
+  const FULL_CIRCLE_DEGREES = 360;
+  const SPEED_MS_VALUES = [7500, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 750, 500];
+
+  // Sizing consts
+  const TOTAL_SOLID_COLOR_WIDTH = canvasWidth * (5 / 32); // 50
+  const TOTAL_FAN_WIDTH = canvasWidth * (5 / 32); // 50
+  const TOTAL_STRIP_WIDTH = canvasWidth - TOTAL_SOLID_COLOR_WIDTH - TOTAL_FAN_WIDTH; // 220
+  const TOTAL_PULSE_WIDTH = TOTAL_FAN_WIDTH;
+
+  // Lifecycle vars
+  let globalProgress = 0; // 0 to 1
+  let currentLoopStartTime = null;
+  let millisecondsPerLoop = null;
+  let currentColorIndex = 0;
+
+  // Effects
+  let solidColors = [];
+  let strips = [];
+  let fans = [];
+  let pulses = [];
+
+  //#region Effect Classes
+  class SolidColor {
+    constructor(x, y, width, height) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+    }
+
+    draw(color) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
+    }
+  }
+
+  class Strip {
+    constructor(x, y, width, maxHeight, movingUp) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.maxHeight = maxHeight;
+      this.movingUp = movingUp;
+    }
+
+    draw(backgroundColor, wipeColor, progress) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, this.width, this.maxHeight);
+
+      const height = progress * this.maxHeight;
+      // Rotating by 180 degrees causes misalignment, so adjusting fillRect coordinates instead
+      const startY = this.movingUp ? this.maxHeight - height : 0;
+      ctx.fillStyle = wipeColor;
+      ctx.fillRect(0, startY, this.width, height);
+
+      ctx.restore();
+    }
+  }
+
+  class Fan {
+    constructor(x, y, length, clockwise) {
+      this.x = x;
+      this.y = y;
+      this.length = length;
+      this.clockwise = clockwise;
+    }
+
+    draw(backgroundColor, wipeColor, progress) {
+      ctx.save();
+      
+      ctx.translate(this.x, this.y);
+      const boundingBox = new Path2D();
+      boundingBox.rect(0, 0, this.length, this.length);
+      ctx.clip(boundingBox);
+      ctx.fillStyle = backgroundColor;
+      ctx.fill(boundingBox);
+
+      ctx.translate(this.length / 2, this.length / 2); // Center the fan
+
+      ctx.rotate(toRadians(-90)); // Start at top of circle
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      const radius = this.length / 2 * Math.sqrt(2);
+      const direction = this.clockwise ? 1 : -1;
+      const degrees = progress * FULL_CIRCLE_DEGREES;
+      const endAngle = direction * toRadians(degrees);
+      ctx.arc(0, 0, radius, 0, endAngle, !this.clockwise);
+      ctx.closePath();
+      ctx.fillStyle = wipeColor;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.length / 2 * (innerFanSize / 100), 0, toRadians(FULL_CIRCLE_DEGREES));
+      ctx.closePath();
+      let fillStyle;
+      switch (innerFanColorType) {
+        case 'Previous Color':
+          fillStyle = backgroundColor;
+          break;
+        case 'Current Color':
+          fillStyle = wipeColor;
+          break;
+        case 'Custom Fan Color':
+          fillStyle = customFanColor;
+          break;
+        default:
+          console.error(`Inner Fan Color Type "${innerFanColorType}" implementation not found.`);
+      }
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  class Pulse {
+    constructor(x, y, length, growing) {
+      this.x = x;
+      this.y = y;
+      this.length = length;
+      this.growing = growing;
+    }
+
+    draw(backgroundColor, wipeColor, progress) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+
+      const boundingBox = new Path2D();
+      boundingBox.rect(0, 0, this.length, this.length);
+      ctx.clip(boundingBox);
+      ctx.fillStyle = backgroundColor;
+      ctx.fill(boundingBox);
+
+      ctx.translate(this.length / 2, this.length / 2); // Center the pulse
+      
+      ctx.fillStyle = wipeColor;
+      switch (pulseShape) {
+        case 'Circle':
+          this.drawCircle(progress);
+          break;
+        case 'Square':
+          this.drawSquare(progress);
+          break;
+        default:
+          console.error(`Pulse Shape "${pulseShape}" implementation not found.`);
+      }
+
+      ctx.restore();
+    }
+
+    drawCircle(progress) {
+      const scaleVal = this.growing ? progress : 1 - progress;
+      const radius = scaleVal * this.length / 2 * Math.sqrt(2);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, toRadians(FULL_CIRCLE_DEGREES));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    drawSquare(progress) {
+      const scaleVal = this.growing ? progress : 1 - progress;
+      const x = scaleVal * -this.length / 2;
+      const y = scaleVal * -this.length / 2;
+      const width = scaleVal * this.length;
+      const height = scaleVal * this.length;
+      ctx.fillRect(x, y, width, height);
+    }
+  }
+  //#endregion Effect Classes
+
+  //#region Helpers
+  function lerp(a, b, ratio) {
+    return a + (b - a) * ratio;
+  }
+
+  function lerpHexColors(color1, color2, ratio) {
+    const r1 = parseInt(color1.substring(1, 3), 16);
+    const g1 = parseInt(color1.substring(3, 5), 16);
+    const b1 = parseInt(color1.substring(5, 7), 16);
+
+    const r2 = parseInt(color2.substring(1, 3), 16);
+    const g2 = parseInt(color2.substring(3, 5), 16);
+    const b2 = parseInt(color2.substring(5, 7), 16);
+
+    const r = Math.round(lerp(r1, r2, ratio));
+    const g = Math.round(lerp(g1, g2, ratio));
+    const b = Math.round(lerp(b1, b2, ratio));
+
+    const hex = (c) => (c < 16 ? '0' : '') + c.toString(16);
+    const lerpColor = `#${hex(r)}${hex(g)}${hex(b)}`;
+
+    return lerpColor;
+  }
+
+  function toRadians(degrees) {
+    return degrees * Math.PI / 180;
+  }
+  //#endregion Helpers
+
+  //#region inits
+  function initEffects() {
+    initSolidColors();
+    initStrips();
+    initFans();
+    initPulses();
+  }
+
+  function initSolidColors() {
+    const width = TOTAL_SOLID_COLOR_WIDTH;
+    const height = canvasHeight / 4;
+    const startX = 0;
+
+    solidColors = [];
+    solidColors.push(new SolidColor(startX, 0,          width, height, false));
+    solidColors.push(new SolidColor(startX, height,     width, height, false));
+    solidColors.push(new SolidColor(startX, height * 2, width, height, true));
+    solidColors.push(new SolidColor(startX, height * 3, width, height, true));
+  }
+
+  function initStrips() {
+    const stripCount = 3;
+    const width = TOTAL_STRIP_WIDTH / stripCount;
+    const startX = TOTAL_SOLID_COLOR_WIDTH;
+
+    strips = [];
+    strips.push(new Strip(startX,             0,                width, canvasHeight,     false));
+    strips.push(new Strip(startX + width,     0,                width, canvasHeight / 2, true));
+    strips.push(new Strip(startX + width,     canvasHeight / 2, width, canvasHeight / 2, false));
+    strips.push(new Strip(startX + width * 2, 0,                width, canvasHeight / 2, false));
+    strips.push(new Strip(startX + width * 2, canvasHeight / 2, width, canvasHeight / 2, true));
+  }
+
+  function initFans() {
+    const length = TOTAL_FAN_WIDTH;
+    const startX = canvasWidth - length;
+
+    fans = [];
+    fans.push(new Fan(      startX, 0,      length, true));
+    fans.push(new Fan(      startX, length, length, false));
+  }
+
+  function initPulses() {
+    const length = TOTAL_PULSE_WIDTH;
+    const startX = canvasWidth - length;
+
+    pulses = [];
+    pulses.push(new Pulse(startX, length * 2, length, true));
+    pulses.push(new Pulse(startX, length * 3, length, false));
+  }
+  //#endregion inits
+
+  //#region SignalRGB Callbacks
+  function onspeedChanged() {
+    millisecondsPerLoop = SPEED_MS_VALUES[speed - 1];
+  }
+
+  function oncolorCountChanged() {
+    currentColorIndex = 0;
+  }
+  //#endregion SignalRGB Callbacks
+
+  function update() {
+    // Lifecycle updates
+    const now = performance.now();
+    if (now - currentLoopStartTime > millisecondsPerLoop) {
+      currentLoopStartTime = now;
+      currentColorIndex = (currentColorIndex + 1) % colorCount;
+    }
+    globalProgress = (now - currentLoopStartTime) / millisecondsPerLoop;
+
+    // Color updates
+    const colors = [color1, color2, color3, color4, color5, color6, color7];
+    const previousColorIndex = (currentColorIndex - 1 + colorCount) % colorCount;
+    const previousColor = colors[previousColorIndex];
+    const currentColor = colors[currentColorIndex];
+    const currentColorInterpolated = lerpHexColors(previousColor, currentColor, globalProgress);
+    const previouisColorInterpolated = lerpHexColors(currentColor, previousColor, globalProgress);
+    const wipeColor = softTransition ? currentColorInterpolated : currentColor;
+
+    // Effect updates
+    if (softTransition) {
+      solidColors.forEach(solidColor => {
+        solidColor.draw(wipeColor);
+      });
+    } else {
+      solidColors[0].draw(wipeColor);
+      solidColors[1].draw(previousColor);
+      solidColors[2].draw(currentColorInterpolated);
+      solidColors[3].draw(previouisColorInterpolated);
+    }
+
+    strips.forEach(strip => {
+      strip.draw(previousColor, wipeColor, globalProgress);
+    });
+
+    fans.forEach(fan => {
+      fan.draw(previousColor, wipeColor, globalProgress);
+    });
+
+    pulses[0].draw(previousColor, wipeColor, globalProgress);
+    pulses[1].draw(wipeColor, previousColor, globalProgress);
+
+    window.requestAnimationFrame(update);
+  }
+
+  function onEngineReady() {
+    initEffects();
+    onspeedChanged();
+    oncolorCountChanged();
+    currentLoopStartTime = performance.now();
+    window.requestAnimationFrame(update);
+  }
+
+  window.requestAnimationFrame(onEngineReady);
+</script>
