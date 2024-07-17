@@ -73,14 +73,14 @@
       this.y += this.dy;
 
       if (colorMode === 'Rainbow') {
-        this.fillStyle = `hsl(${this.x / canvasWidth * MAX_HUE}, 100%, 50%)`;
+        this.fillStyle = getColorModeFillStyle(this.x, this.y);
       }
 
       // Outside of canvas
       if (this.x < 0 || this.x > canvasWidth || this.y < 0 || this.y > canvasHeight) {
         this.x = getRandomInt(canvasWidth + 1);
         this.y = getRandomInt(canvasHeight + 1);
-        this.fillStyle = colorMode === 'Rainbow' ? `hsl(${this.x}, 100%, 50%)` : getColorModeFillStyle();
+        this.fillStyle = getColorModeFillStyle(this.x, this.y);
       }
     }
   }
@@ -88,11 +88,14 @@
   function initSiteArray() {
     sites = [];
     for (let i = 0; i < siteCount; i++) {
-      sites.push(new Site(getRandomInt(canvasWidth + 1), getRandomInt(canvasHeight + 1), getColorModeFillStyle()));
+      const x = getRandomInt(canvasWidth + 1);
+      const y = getRandomInt(canvasHeight + 1);
+      const fillStyle = getColorModeFillStyle(x, y);
+      sites.push(new Site(x, y, fillStyle));
     }
   }
 
-  function getColorModeFillStyle() {
+  function getColorModeFillStyle(x, y) {
     let fillStyle;
     const customColors = [color1, color2, color3, color4];
     switch (colorMode) {
@@ -101,6 +104,9 @@
         const colorScheme = COLOR_SCHEMES.find(scheme => scheme.name === colorMode);
         const colorIndex = getRandomInt(COLOR_SCHEMES_COLOR_COUNT);
         fillStyle = `hsl(${colorScheme.colors[colorIndex][0]}, ${colorScheme.colors[colorIndex][1]}%, ${colorScheme.colors[colorIndex][2]}%)`;
+        break;
+      case 'Rainbow':
+        fillStyle = `hsl(${x / canvasWidth * MAX_HUE}, 100%, 50%)`;
         break;
       case 'Random':
         fillStyle = `hsl(${getRandomInt(MAX_HUE)}, 100%, 50%)`;
@@ -114,7 +120,7 @@
         fillStyle = customColors[randColor];
         break;
       default:
-        console.error(`"${colorMode}" Color Mode not implemented...`);
+        console.error(`\"${colorMode}\" Color Mode not implemented...`);
     }
     return fillStyle;
   }
