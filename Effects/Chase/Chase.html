@@ -195,7 +195,7 @@
       ctx.translate(this.x, this.y);
 
       const clipArea = new Path2D();
-      clipArea.rect(-this.radius, - this.radius, this.radius * 2, this.radius * 2);
+      clipArea.rect(-this.radius, -this.radius, this.radius * 2, this.radius * 2);
       ctx.clip(clipArea);
 
       const rotationDirection = this.clockwise ? 1 : -1;
