@@ -2,7 +2,7 @@
   <title>Custom Color Cycle</title>
   <meta description="Cycle between colors of your choosing."/>
   <meta publisher="Derek Huber"/>
-  <meta property="millisecondsPerColor" label="Milliseconds Per Color" type="number" min="250" max="10000" step="250" default="1000"/>
+  <meta property="speed" label="Speed" type="number" min="1" max="15" default="12"/>
   <meta property="interpolateColors" label="Transition Between Colors" type="boolean" default="0"/>
   <meta property="colorCount" label="Number Of Colors" type="number" min="2" max="7" default="7"/>
   <meta property="color1" label="Color 1" type="color" min="0" max="360" default="#ff0000"/>
@@ -24,6 +24,8 @@
   const ctx = canvas.getContext('2d');
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
+
+  const SPEED_MS_VALUES = [10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 750, 500, 250];
 
   let currentColor = 0;
   let currentColorStartTime = Date.now();
@@ -57,14 +59,14 @@
 
   function update() {
     const now = Date.now();
-    if (now - currentColorStartTime > millisecondsPerColor) {
+    if (now - currentColorStartTime > SPEED_MS_VALUES[speed - 1]) {
       currentColor = (currentColor + 1) % colorCount;
       currentColorStartTime = now;
     }
 
     const colors = [color1, color2, color3, color4, color5, color6, color7];
     if (interpolateColors) {
-      const ratio = (now - currentColorStartTime) / millisecondsPerColor;
+      const ratio = (now - currentColorStartTime) / SPEED_MS_VALUES[speed - 1];
       ctx.fillStyle = lerpHexColors(colors[currentColor], colors[(currentColor + 1) % colorCount], ratio);
     } else {
       ctx.fillStyle = colors[currentColor];
